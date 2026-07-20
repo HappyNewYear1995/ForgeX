@@ -1,0 +1,95 @@
+{{template "layout" .}}
+
+{{define "content"}}
+<div class="page-header">
+    <h1>{{.Title}}</h1>
+</div>
+
+<div class="card">
+    {{if .Product}}
+    <form method="POST" action="/products/{{.Product.ID}}/edit" onsubmit="return validateProductForm(this)">
+    {{else}}
+    <form method="POST" action="/products/new" onsubmit="return validateProductForm(this)">
+    {{end}}
+        <div class="form-group">
+            <label for="name">项目名称 *</label>
+            <input type="text" id="name" name="name" class="form-input"
+                   value="{{if .Product}}{{.Product.Name}}{{end}}" required placeholder="如 ACIS">
+        </div>
+        <div class="form-group">
+            <label for="description">描述</label>
+            <textarea id="description" name="description" class="form-input" rows="3">{{if .Product}}{{.Product.Description}}{{end}}</textarea>
+        </div>
+        <div class="form-group">
+            <label for="current_version">当前版本号 <span style="color:#94a3b8;font-weight:400;font-size:0.8rem">(AA.BB.CC.DD)</span></label>
+            <input type="text" id="current_version" name="current_version" class="form-input"
+                   value="{{if .Product}}{{.Product.CurrentVersion}}{{else}}0.0.0.0{{end}}" placeholder="AA.BB.CC.DD" pattern="\d+\.\d+\.\d+\.\d+" title="版本号格式为 AA.BB.CC.DD，每段为非负整数">
+        </div>
+
+        <!-- 组件选择 -->
+        <div class="form-group">
+            <label>选择组件 <span style="color:#94a3b8;font-weight:400;font-size:0.8rem">(勾选后配置 Git 仓库和分支过滤条件)</span></label>
+            <div class="comp-select-box" id="compSelectBox">
+                {{range .ConfigTree}}
+                {{$sel := index $.SelectedComps .ID}}
+                <div class="comp-select-item">
+                    <label class="comp-select-label">
+                        <input type="checkbox" name="comp_ids" value="{{.ID}}" {{if $sel}}checked{{end}} onchange="toggleCompConfig(this, {{.ID}})">
+                        <span class="tree-icon">📦</span>
+                        <strong>{{.Name}}</strong>
+                        <code style="margin-left:6px;color:#64748b">{{.Code}}</code>
+                    </label>
+                    <div class="comp-config-fields" id="compConfig_{{.ID}}" style="{{if not $sel}}display:none{{end}}">
+                        <div class="form-group" style="margin-bottom:8px">
+                            <label>Git 仓库 <span style="color:#94a3b8;font-weight:400;font-size:0.8rem">(从 Gitea 搜索选择)</span></label>
+                            <div class="repo-select-wrapper" data-comp-id="{{.ID}}">
+                                <input type="text" class="form-input repo-search-input" placeholder="输入仓库名搜索..." autocomplete="off" data-comp-id="{{.ID}}" {{if $sel}}value="{{$sel.GitURL}}"{{end}}>
+                                <input type="hidden" name="comp_git_url_{{.ID}}" class="repo-url-value" {{if $sel}}value="{{$sel.GitURL}}"{{end}}>
+                                <div class="repo-dropdown" style="display:none"></div>
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0">
+                            <label>分支/Tag 过滤条件</label>
+                            <input type="text" name="comp_branch_filter_{{.ID}}" class="form-input" placeholder="如 release/* 或 v*" {{if $sel}}value="{{$sel.BranchFilter}}"{{end}}>
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+                {{if not .ConfigTree}}
+                <div class="text-center" style="padding:16px;color:#94a3b8">暂无组件字典，请先到<a href="/config">配置管理</a>添加</div>
+                {{end}}
+            </div>
+        </div>
+
+        <!-- 测试环境 -->
+        <div class="form-group">
+            <label class="build-toggle-label">
+                <input type="checkbox" id="testEnvEnabled" name="test_env_enabled" value="true" {{if and .Product .Product.TestEnvEnabled}}checked{{end}} onchange="toggleTestEnv()"><span>支持测试环境</span>
+            </label>
+            <div id="testEnvFields" style="{{if not (and .Product .Product.TestEnvEnabled)}}display:none{{end}};margin-top:8px">
+                {{if .TestEnvs}}
+                <label style="color:#64748b;font-size:0.85rem;margin-bottom:6px;display:block">选择测试环境 <span style="color:#94a3b8;font-size:0.78rem">(从配置管理中选择)</span></label>
+                <div class="test-env-select-box">
+                    {{range .TestEnvs}}
+                    <label class="test-env-option">
+                        <input type="checkbox" name="test_env_ids" value="{{.ID}}" {{if index $.SelectedEnvIDs .ID}}checked{{end}}>
+                        <strong>{{.Name}}</strong>
+                        <span style="color:#64748b;font-size:0.8rem;margin-left:6px">{{.URL}}</span>
+                    </label>
+                    {{end}}
+                </div>
+                {{else}}
+                <div style="color:#94a3b8;font-size:0.85rem;padding:12px;background:#f8fafc;border-radius:6px;text-align:center">
+                    暂无测试环境，请先到<a href="/config">配置管理</a>添加
+                </div>
+                {{end}}
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">保存</button>
+            <a href="/products" class="btn">取消</a>
+        </div>
+    </form>
+</div>
+{{end}}

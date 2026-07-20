@@ -1,0 +1,104 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - 发布管理平台</title>
+    <link rel="stylesheet" href="/static/style.css?v={{cacheBust}}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <a href="/">
+                <svg style="width:20px;height:20px;vertical-align:middle;margin-right:6px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                </svg>
+                发布管理平台
+            </a>
+        </div>
+        <div class="nav-links">
+            <a href="/products" class="nav-link">项目</a>
+            <a href="/config" class="nav-link">配置管理</a>
+            <a href="/docs" class="nav-link">文档</a>
+        </div>
+        <div class="nav-user">
+            <svg style="width:16px;height:16px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span>{{.Username}}</span>
+            <a href="/logout" class="btn btn-sm btn-outline-light">退出</a>
+        </div>
+    </nav>
+    <main class="container">
+        {{template "content" .}}
+    </main>
+    <!-- Toast 提示 -->
+    <div id="toast" class="toast" style="display:none"></div>
+    <!-- 确认删除弹窗 -->
+    <div id="confirmModal" class="modal-overlay" style="display:none">
+        <div class="modal-box">
+            <div class="modal-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+            </div>
+            <h3 class="modal-title">确认操作</h3>
+            <p id="confirmModalMsg" class="modal-msg">确定要执行此操作吗？</p>
+            <div class="modal-actions">
+                <button class="btn" id="confirmCancel">取消</button>
+                <button class="btn btn-danger" id="confirmOk">确认</button>
+            </div>
+        </div>
+    </div>
+    <!-- 构建弹窗 -->
+    <div id="buildModal" class="modal-overlay" style="display:none">
+        <div class="modal-box build-modal-box">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+                <h3 class="modal-title" style="margin:0" id="buildModalTitle">触发构建</h3>
+                <button type="button" class="btn btn-sm" onclick="closeBuildModal()" style="border:none;font-size:1.2rem;line-height:1">&times;</button>
+            </div>
+            <form method="POST" id="buildForm">
+                <div class="form-group">
+                    <label>构建类型</label>
+                    <div class="build-radio-group">
+                        <label class="build-radio-label"><input type="radio" name="build_type" value="upgrade" checked><span>升级包</span></label>
+                        <label class="build-radio-label"><input type="radio" name="build_type" value="full"><span>整包</span></label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="build-toggle-label">
+                        <input type="checkbox" id="specifyVersion" onchange="toggleVersionInput()"><span>指定版本</span>
+                    </label>
+                    <div id="versionInputGroup" style="display:none;margin-top:6px">
+                        <input type="text" name="product_version" id="buildVersion" class="form-input" placeholder="AA.BB.CC.DD" pattern="\d+\.\d+\.\d+\.\d+" title="版本号格式为 AA.BB.CC.DD">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="build-toggle-label">
+                        <input type="checkbox" id="isFormal" onchange="toggleReleaseNotes()"><span>正式更新包</span>
+                    </label>
+                    <div id="releaseNotesGroup" style="display:none;margin-top:6px">
+                        <textarea name="release_notes" class="form-input" rows="3" placeholder="变更说明..."></textarea>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>选择组件及模块</label>
+                    <div id="configTreeBox" class="config-select-box">
+                        <div class="text-center" style="padding:16px;color:#94a3b8">加载中...</div>
+                    </div>
+                    <input type="hidden" name="component_mods" id="componentMods">
+                </div>
+                <div style="display:flex;align-items:center;gap:16px;margin-top:4px">
+                    <label class="build-toggle-label">
+                        <input type="checkbox" name="auto_sync_test" value="true" checked><span>自动同步测试环境</span>
+                    </label>
+                    <button type="submit" class="btn btn-primary" style="margin-left:auto">触发构建</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script src="/static/app.js?v={{cacheBust}}"></script>
+</body>
+</html>
+{{end}}

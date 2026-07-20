@@ -1,0 +1,83 @@
+{{template "layout" .}}
+
+{{define "content"}}
+<div class="page-header">
+    <h1>项目列表</h1>
+    <a href="/products/new" class="btn btn-primary">新建项目</a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <form method="GET" action="/products" class="search-form">
+            <input type="text" name="q" value="{{.Keyword}}" placeholder="搜索项目..." class="form-input">
+            <button type="submit" class="btn">搜索</button>
+        </form>
+    </div>
+    <table class="table table-expand">
+        <thead>
+            <tr>
+                <th style="width:36px"></th>
+                <th>ID</th>
+                <th>项目名称</th>
+                <th>描述</th>
+                <th>当前版本</th>
+                <th>创建时间</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Products}}
+            <tr class="row-main" data-product-id="{{.ID}}">
+                <td class="expand-cell">
+                    <button class="expand-btn" title="展开版本历史">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </td>
+                <td>{{.ID}}</td>
+                <td><a href="/products/{{.ID}}">{{.Name}}</a></td>
+                <td>{{.Description}}</td>
+                <td><span class="badge badge-success">{{.CurrentVersion}}</span></td>
+                <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+                <td class="actions">
+                    <button type="button" class="btn btn-sm btn-build" onclick="openBuildModal({{.ID}}, '{{.Name}}', '{{.CurrentVersion}}')">构建</button>
+                    <a href="/products/{{.ID}}" class="btn btn-sm">详情</a>
+                    <a href="/products/{{.ID}}/edit" class="btn btn-sm">编辑</a>
+                    <form method="POST" action="/products/{{.ID}}/delete" style="display:inline" data-confirm="确定删除此项目及其所有数据？">
+                        <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                    </form>
+                </td>
+            </tr>
+            <tr class="row-expand" data-product-id="{{.ID}}" style="display:none">
+                <td colspan="7">
+                    <div class="expand-content">
+                        <div class="expand-loading" style="display:none">
+                            <span class="spinner"></span> 加载中...
+                        </div>
+                        <div class="expand-empty" style="display:none">
+                            暂无版本发布记录
+                        </div>
+                        <table class="table table-nested" style="display:none">
+                            <thead>
+                                <tr>
+                                    <th>版本</th>
+                                    <th>环境</th>
+                                    <th>状态</th>
+                                    <th>说明</th>
+                                    <th>创建时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="7" class="text-center">暂无项目</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

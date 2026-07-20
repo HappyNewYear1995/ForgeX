@@ -1,0 +1,19 @@
+server:
+  port: 19090
+  secret_key: "change-me-to-random-string"
+
+database:
+  path: "./data/platform.db"
+
+auth:
+  admin_user: admin
+  admin_password: changeme
+
+jenkins:
+  url: "http://jenkins.example.com"
+  user: "admin"
+  token: "your-api-token"
+
+gitea:
+  url: "http://gitea.example.com"
+  token: "your-gitea-token"

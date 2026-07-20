@@ -1,0 +1,69 @@
+{{template "layout" .}}
+
+{{define "content"}}
+<div class="page-header">
+    <h1>仪表盘</h1>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{.ProductCount}}</div>
+        <div class="stat-label">项目</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{.ComponentCount}}</div>
+        <div class="stat-label">组件</div>
+    </div>
+    <div class="stat-card stat-success">
+        <div class="stat-number">{{.ReleaseCount}}</div>
+        <div class="stat-label">版本发布</div>
+    </div>
+    <div class="stat-card stat-success">
+        <div class="stat-number">{{.BuildStats.Success}}</div>
+        <div class="stat-label">构建成功</div>
+    </div>
+    <div class="stat-card stat-failed">
+        <div class="stat-number">{{.BuildStats.Failed}}</div>
+        <div class="stat-label">构建失败</div>
+    </div>
+    <div class="stat-card stat-running">
+        <div class="stat-number">{{.BuildStats.Running}}</div>
+        <div class="stat-label">进行中</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>最近构建</h2>
+        <a href="/products" class="btn btn-primary">管理项目</a>
+    </div>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>项目</th>
+                <th>版本</th>
+                <th>环境</th>
+                <th>状态</th>
+                <th>触发人</th>
+                <th>时间</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .RecentBuilds}}
+            <tr>
+                <td>{{if .Product}}{{.Product.Name}}{{end}}</td>
+                <td><code>{{.ProductVersion}}</code></td>
+                <td><span class="badge badge-env-{{.BuildEnv}}">{{.BuildEnv}}</span></td>
+                <td><span class="badge badge-{{.Status}}">{{.Status}}</span></td>
+                <td>{{.TriggeredBy}}</td>
+                <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="6" class="text-center">暂无构建记录</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

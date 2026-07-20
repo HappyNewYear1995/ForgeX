@@ -1,0 +1,49 @@
+{{template "layout" .}}
+
+{{define "content"}}
+<div class="page-header">
+    <h1>构建历史</h1>
+    <a href="/products" class="btn">返回项目</a>
+</div>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>版本</th>
+                <th>环境</th>
+                <th>状态</th>
+                <th>Jenkins #</th>
+                <th>触发人</th>
+                <th>开始时间</th>
+                <th>结束时间</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Builds}}
+            <tr>
+                <td>{{.ID}}</td>
+                <td><code>{{.ProductVersion}}</code></td>
+                <td><span class="badge badge-env-{{.BuildEnv}}">{{.BuildEnv}}</span></td>
+                <td><span class="badge badge-{{.Status}}">{{.Status}}</span></td>
+                <td>{{.JenkinsBuildNumber}}</td>
+                <td>{{.TriggeredBy}}</td>
+                <td>{{if .StartedAt}}{{.StartedAt.Format "15:04:05"}}{{else}}-{{end}}</td>
+                <td>{{if .FinishedAt}}{{.FinishedAt.Format "15:04:05"}}{{else}}-{{end}}</td>
+                <td>
+                    {{if .LogURL}}
+                    <a href="/builds/{{.ID}}/log" target="_blank" class="btn btn-sm">查看日志</a>
+                    {{end}}
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="9" class="text-center">暂无构建记录</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

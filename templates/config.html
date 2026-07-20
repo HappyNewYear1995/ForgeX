@@ -1,0 +1,264 @@
+{{template "layout" .}}
+
+{{define "content"}}
+<div class="page-header">
+    <h1>配置管理</h1>
+</div>
+
+<div class="card" data-collapse-id="components">
+    <div class="card-header" onclick="toggleCollapse(this)">
+        <h2>组件 / 模块字典</h2>
+        <span class="collapse-toggle"><span class="collapse-arrow">▾</span> <span class="collapse-text">缩起</span></span>
+    </div>
+    <div class="card-body">
+
+    <!-- 新增根组件 -->
+    <form method="POST" action="/config/new" class="inline-form">
+        <input type="hidden" name="parent_id" value="0">
+        <input type="text" name="name" placeholder="组件名称" class="form-input" required>
+        <input type="text" name="code" placeholder="编码 (如 acis-svr)" class="form-input" required>
+        <input type="text" name="description" placeholder="说明" class="form-input">
+        <input type="number" name="sort_order" placeholder="排序" class="form-input" style="width:80px" value="0">
+        <button type="submit" class="btn btn-primary">添加组件</button>
+    </form>
+
+    <!-- 树形列表 -->
+    {{if .Tree}}
+    <table class="table config-tree">
+        <thead>
+            <tr>
+                <th style="width:30%">名称</th>
+                <th style="width:18%">编码</th>
+                <th style="width:28%">说明</th>
+                <th style="width:8%">排序</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Tree}}
+            <!-- 显示行 -->
+            <tr class="tree-root row-view" data-id="{{.ID}}">
+                <td>
+                    <span class="tree-icon">📦</span>
+                    <strong>{{.Name}}</strong>
+                </td>
+                <td><code>{{.Code}}</code></td>
+                <td>{{.Description}}</td>
+                <td>{{.SortOrder}}</td>
+                <td class="actions">
+                    <button type="button" class="btn btn-sm btn-edit" onclick="toggleEdit(this)">编辑</button>
+                    <form method="POST" action="/config/{{.ID}}/delete" style="display:inline" data-confirm="确定删除组件「{{.Name}}」及其所有模块？">
+                        <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                    </form>
+                </td>
+            </tr>
+            <!-- 编辑行（隐藏） -->
+            <tr class="tree-root row-edit" data-id="{{.ID}}" style="display:none">
+                <td colspan="5" class="cell-edit">
+                    <form method="POST" action="/config/{{.ID}}/edit" class="inline-form inline-form-compact">
+                        <span class="tree-icon">📦</span>
+                        <input type="text" name="name" class="form-input form-input-sm" value="{{.Name}}" required>
+                        <input type="text" name="code" class="form-input form-input-sm" value="{{.Code}}" required>
+                        <input type="text" name="description" class="form-input form-input-sm" value="{{.Description}}" placeholder="说明">
+                        <input type="number" name="sort_order" class="form-input form-input-sm" style="width:60px" value="{{.SortOrder}}">
+                        <button type="submit" class="btn btn-sm btn-primary">保存</button>
+                        <button type="button" class="btn btn-sm" onclick="toggleEdit(this)">取消</button>
+                    </form>
+                </td>
+            </tr>
+            {{if .Children}}
+            {{range .Children}}
+            <tr class="tree-child row-view" data-id="{{.ID}}">
+                <td>
+                    <span class="tree-indent"></span>
+                    <span class="tree-icon">📄</span>
+                    {{.Name}}
+                </td>
+                <td><code>{{.Code}}</code></td>
+                <td>{{.Description}}</td>
+                <td>{{.SortOrder}}</td>
+                <td class="actions">
+                    <button type="button" class="btn btn-sm btn-edit" onclick="toggleEdit(this)">编辑</button>
+                    <form method="POST" action="/config/{{.ID}}/delete" style="display:inline" data-confirm="确定删除模块「{{.Name}}」？">
+                        <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                    </form>
+                </td>
+            </tr>
+            <tr class="tree-child row-edit" data-id="{{.ID}}" style="display:none">
+                <td colspan="5" class="cell-edit">
+                    <form method="POST" action="/config/{{.ID}}/edit" class="inline-form inline-form-compact">
+                        <span class="tree-indent"></span>
+                        <span class="tree-icon">📄</span>
+                        <input type="text" name="name" class="form-input form-input-sm" value="{{.Name}}" required>
+                        <input type="text" name="code" class="form-input form-input-sm" value="{{.Code}}" required>
+                        <input type="text" name="description" class="form-input form-input-sm" value="{{.Description}}" placeholder="说明">
+                        <input type="number" name="sort_order" class="form-input form-input-sm" style="width:60px" value="{{.SortOrder}}">
+                        <button type="submit" class="btn btn-sm btn-primary">保存</button>
+                        <button type="button" class="btn btn-sm" onclick="toggleEdit(this)">取消</button>
+                    </form>
+                </td>
+            </tr>
+            {{end}}
+            {{end}}
+            <!-- 新增子模块 -->
+            <tr class="tree-add">
+                <td colspan="5">
+                    <form method="POST" action="/config/new" class="inline-form inline-form-compact">
+                        <input type="hidden" name="parent_id" value="{{.ID}}">
+                        <span class="tree-indent"></span>
+                        <input type="text" name="name" placeholder="模块名称" class="form-input form-input-sm" required>
+                        <input type="text" name="code" placeholder="编码" class="form-input form-input-sm" required>
+                        <input type="text" name="description" placeholder="说明" class="form-input form-input-sm">
+                        <input type="number" name="sort_order" placeholder="排序" class="form-input form-input-sm" style="width:60px" value="0">
+                        <button type="submit" class="btn btn-sm btn-primary">添加模块</button>
+                    </form>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="text-center" style="padding:32px;color:#94a3b8">暂无配置项，请添加组件</div>
+    {{end}}
+
+    </div><!-- /card-body -->
+</div>
+
+<!-- 系统配置 -->
+{{range .SysCategories}}
+<div class="card" data-collapse-id="sys_{{.Category}}">
+    <div class="card-header" onclick="toggleCollapse(this)">
+        <h2>{{.Title}}</h2>
+        <span class="collapse-toggle"><span class="collapse-arrow">▾</span> <span class="collapse-text">缩起</span></span>
+    </div>
+    <div class="card-body">
+    <div class="sys-status-bar" id="apiStatus_{{.Category}}" data-status="{{.TestStatus}}" data-time="{{.TestTime}}">
+        <span class="api-status{{if eq .TestStatus "ok"}} api-ok{{else if eq .TestStatus "err"}} api-err{{end}}">{{if eq .TestStatus "ok"}}✓ 连接正常{{else if eq .TestStatus "err"}}✗ 连接异常{{end}}</span>
+        {{if .TestTime}}<span class="sys-test-time">最近测试: {{.TestTime}}</span>{{end}}
+    </div>
+    <form method="POST" action="/config/sys/{{.Category}}" class="sys-config-form" data-category="{{.Category}}">
+        {{range .Fields}}
+        <div class="form-group">
+            <label>{{.Label}}</label>
+            {{if .IsPassword}}
+            <input type="password" name="{{.Key}}" class="form-input" value="{{.Value}}" placeholder="{{.Placeholder}}">
+            {{else}}
+            <input type="text" name="{{.Key}}" class="form-input" value="{{.Value}}" placeholder="{{.Placeholder}}">
+            {{end}}
+        </div>
+        {{end}}
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">保存配置</button>
+            <button type="button" class="btn btn-outline btn-test-api" onclick="testAPI(this, '{{.Category}}')">测试连接</button>
+        </div>
+    </form>
+    </div><!-- /card-body -->
+</div>
+{{end}}
+
+<!-- 测试环境 -->
+<div class="card" data-collapse-id="testenv">
+    <div class="card-header" onclick="toggleCollapse(this)">
+        <h2>测试环境</h2>
+        <span class="collapse-toggle"><span class="collapse-arrow">▾</span> <span class="collapse-text">缩起</span></span>
+    </div>
+    <div class="card-body">
+
+    <!-- 新增测试环境 -->
+    <form method="POST" action="/config/testenv/new" class="inline-form inline-form-nowrap">
+        <input type="text" name="name" placeholder="环境名称" class="form-input" required>
+        <input type="url" name="url" placeholder="http(s)://地址" class="form-input" style="min-width:280px" required>
+        <button type="submit" class="btn btn-primary">添加</button>
+    </form>
+
+    {{if .TestEnvs}}
+    <table class="table config-tree">
+        <thead>
+            <tr>
+                <th style="width:15%">名称</th>
+                <th style="width:40%">地址</th>
+                <th style="width:10%">脚本</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .TestEnvs}}
+            <!-- 显示行 -->
+            <tr class="row-view" data-id="{{.ID}}">
+                <td><strong>{{.Name}}</strong></td>
+                <td><code>{{.URL}}</code></td>
+                <td>
+                    {{if .ScriptContent}}<span class="badge badge-success script-cell" onclick="openScriptModal({{.ID}}, '{{.Name}}')" title="点击查看脚本">✓</span>{{else}}<span class="badge script-cell script-cell-empty" onclick="openScriptModal({{.ID}}, '{{.Name}}')" title="点击添加脚本">-</span>{{end}}
+                </td>
+                <td class="actions">
+                    <button type="button" class="btn btn-sm btn-edit" onclick="toggleEdit(this)">编辑</button>
+                    <form method="POST" action="/config/testenv/{{.ID}}/delete" style="display:inline" data-confirm="确定删除测试环境「{{.Name}}」？">
+                        <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                    </form>
+                </td>
+            </tr>
+            <!-- 编辑行（隐藏） -->
+            <tr class="row-edit" data-id="{{.ID}}" style="display:none">
+                <td colspan="4" class="cell-edit">
+                    <form method="POST" action="/config/testenv/{{.ID}}/edit" class="inline-form inline-form-compact inline-form-nowrap">
+                        <input type="text" name="name" class="form-input form-input-sm" value="{{.Name}}" required>
+                        <input type="url" name="url" class="form-input form-input-sm" value="{{.URL}}" style="min-width:280px" required>
+                        <button type="submit" class="btn btn-sm btn-primary">保存</button>
+                        <button type="button" class="btn btn-sm" onclick="toggleEdit(this)">取消</button>
+                    </form>
+                </td>
+            </tr>
+            <!-- 脚本管理弹窗数据 -->
+            {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="text-center" style="padding:32px;color:#94a3b8">暂无测试环境，请添加</div>
+    {{end}}
+
+    </div><!-- /card-body -->
+</div>
+
+<!-- 脚本管理弹窗 -->
+<div id="scriptModal" class="modal-overlay script-modal-overlay" style="display:none">
+    <div class="modal-box script-modal-box">
+        <div class="script-modal-header">
+            <h3 class="script-modal-title">升级脚本 — <span id="smEnvName"></span></h3>
+            <button type="button" class="btn-close-modal" onclick="closeScriptModal()">&times;</button>
+        </div>
+        <div class="script-modal-toolbar">
+            <span class="script-status-badge" id="smStatus">未执行</span>
+            <span class="script-time" id="smTime"></span>
+            <div class="script-modal-actions">
+                <button type="button" class="btn btn-sm btn-record" onclick="startRecording()">录制</button>
+                <button type="button" class="btn btn-sm btn-edit" onclick="toggleSmEdit()">编辑</button>
+                <button type="button" class="btn btn-sm btn-run" onclick="runScriptExec()">执行</button>
+            </div>
+        </div>
+        <div class="script-modal-body">
+            <div id="smPreview" class="script-preview">
+                <pre class="script-preview-code" id="smPreviewCode">暂无脚本内容</pre>
+            </div>
+            <div id="smEditor" class="script-editor" style="display:none">
+                <textarea id="smTextarea" class="script-textarea" rows="16" spellcheck="false"></textarea>
+                <div class="script-editor-actions">
+                    <button type="button" class="btn btn-sm btn-primary" onclick="saveScript()">保存</button>
+                    <button type="button" class="btn btn-sm" onclick="toggleSmEdit()">取消</button>
+                </div>
+            </div>
+            <div id="smRecording" class="script-recording-panel" style="display:none">
+                <div class="recording-spinner"></div>
+                <p class="recording-text">正在录制中，请在 Playwright 浏览器中完成操作后关闭...</p>
+            </div>
+        </div>
+        <div id="smLogPanel" class="script-output" style="display:none">
+            <pre class="script-log" id="smLog"></pre>
+        </div>
+    </div>
+</div>
+
+<!-- 脚本数据 -->
+<script id="scriptData" type="application/json">
+{ {{- if .TestEnvs}}{{range $i, $env := .TestEnvs}}{{if $i}},{{end}}"{{$env.ID}}":{"content":{{printf "%q" $env.ScriptContent}},"status":"{{or $env.LastRunStatus "idle"}}","time":"{{if $env.LastRunAt}}{{$env.LastRunAt.Format "2006-01-02 15:04:05"}}{{end}}","output":{{printf "%q" $env.LastRunOutput}}}{{end}}{{end}} }
+</script>
+{{end}}

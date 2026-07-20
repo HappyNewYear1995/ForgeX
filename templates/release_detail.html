@@ -1,0 +1,82 @@
+{{template "layout" .}}
+
+{{define "content"}}
+<div class="page-header">
+    <h1>{{.Release.Version}} <span class="badge badge-release-{{.Release.Status}}">{{.Release.Status}}</span></h1>
+    <div class="header-actions">
+        <a href="/releases" class="btn">返回列表</a>
+    </div>
+</div>
+
+<div class="info-grid">
+    <div class="info-item">
+        <span class="info-label">项目</span>
+        <span class="info-value">{{if .Release.Product}}{{.Release.Product.Name}}{{end}}</span>
+    </div>
+    <div class="info-item">
+        <span class="info-label">版本</span>
+        <span class="info-value">{{.Release.Version}}</span>
+    </div>
+    <div class="info-item">
+        <span class="info-label">构建环境</span>
+        <span class="info-value"><span class="badge badge-env-{{.Release.BuildEnv}}">{{.Release.BuildEnv}}</span></span>
+    </div>
+    <div class="info-item">
+        <span class="info-label">状态</span>
+        <span class="info-value"><span class="badge badge-release-{{.Release.Status}}">{{.Release.Status}}</span></span>
+    </div>
+    <div class="info-item">
+        <span class="info-label">说明</span>
+        <span class="info-value">{{.Release.Description}}</span>
+    </div>
+    <div class="info-item">
+        <span class="info-label">创建时间</span>
+        <span class="info-value">{{.Release.CreatedAt.Format "2006-01-02 15:04:05"}}</span>
+    </div>
+</div>
+
+<!-- 组件快照 -->
+<div class="card">
+    <div class="card-header">
+        <h2>组件快照 (L2)</h2>
+    </div>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>组件名称</th>
+                <th>版本</th>
+                <th>Git 分支/Tag</th>
+                <th>Git Commit</th>
+                <th>制品文件</th>
+                <th>构建状态</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Release.Components}}
+            <tr>
+                <td><strong>{{.ComponentName}}</strong></td>
+                <td><code>{{.ComponentVersion}}</code></td>
+                <td><code>{{.GitBranch}}</code></td>
+                <td><code>{{if .GitCommit}}{{.GitCommit}}{{else}}-{{end}}</code></td>
+                <td><code>{{.ArtifactFile}}</code></td>
+                <td><span class="badge badge-{{.BuildStatus}}">{{.BuildStatus}}</span></td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="6" class="text-center">暂无组件快照</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+<!-- Manifest JSON -->
+{{if .Release.ManifestJSON}}
+<div class="card">
+    <div class="card-header">
+        <h2>Manifest (项目清单)</h2>
+    </div>
+    <pre style="background:#f8fafc;padding:16px;border-radius:8px;overflow-x:auto;font-size:0.85rem;line-height:1.6;border:1px solid #e2e8f0">{{.Release.ManifestJSON}}</pre>
+</div>
+{{end}}
+{{end}}

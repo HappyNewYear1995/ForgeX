@@ -1,0 +1,41 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local config (contains secrets)
+config.yaml
+
+# Application data
+data/
+
+# Temporary script files
+scripts_tmp/
+
+# Screenshots
+screenshots/
+
+# Go workspace
+go.work
+go.work.sum

@@ -1,0 +1,45 @@
+{{template "layout" .}}
+
+{{define "content"}}
+<div class="page-header">
+    <h1>版本发布</h1>
+    <a href="/products" class="btn">管理项目</a>
+</div>
+
+<div class="card">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>项目</th>
+                <th>版本</th>
+                <th>环境</th>
+                <th>状态</th>
+                <th>说明</th>
+                <th>组件数</th>
+                <th>创建时间</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Releases}}
+            <tr>
+                <td>{{if .Product}}{{.Product.Name}}{{end}}</td>
+                <td><strong>{{.Version}}</strong></td>
+                <td><span class="badge badge-env-{{.BuildEnv}}">{{.BuildEnv}}</span></td>
+                <td><span class="badge badge-release-{{.Status}}">{{.Status}}</span></td>
+                <td>{{.Description}}</td>
+                <td>{{len .Components}}</td>
+                <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+                <td>
+                    <a href="/releases/{{.ID}}" class="btn btn-sm">Manifest</a>
+                </td>
+            </tr>
+            {{else}}
+            <tr>
+                <td colspan="8" class="text-center">暂无版本发布记录</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
