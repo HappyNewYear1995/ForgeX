@@ -102,10 +102,59 @@ func (s *PlaywrightService) GetTestEnv(id uint) (*model.TestEnv, error) {
 	return s.testEnvStore.GetByID(id)
 }
 
+// getAppDir returns the directory where the executable is located.
+func getAppDir() string {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "."
+	}
+	return filepath.Dir(exePath)
+}
+
+// ensurePlaywrightInstalled checks if playwright npm package exists in appDir/node_modules,
+// and installs it if missing.
+func ensurePlaywrightInstalled(appDir string) error {
+	pwDir := filepath.Join(appDir, "node_modules", "playwright")
+	if _, err := os.Stat(pwDir); err == nil {
+		return nil // already installed
+	}
+
+	log.Printf("[playwright] playwright module not found in %s, installing...", appDir)
+
+	// Initialize package.json if not exists
+	pkgJSON := filepath.Join(appDir, "package.json")
+	if _, err := os.Stat(pkgJSON); os.IsNotExist(err) {
+		_ = os.WriteFile(pkgJSON, []byte(`{"name":"forgex-scripts","private":true}`), 0644)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "npm", "install", "playwright")
+	cmd.Dir = appDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("[playwright] npm install failed: %v, output: %s", err, string(out))
+		return fmt.Errorf("安装 playwright 失败: %v\n%s", err, string(out))
+	}
+	log.Printf("[playwright] playwright installed successfully in %s", appDir)
+	return nil
+}
+
 // ExecuteScript runs the script of a test environment.
 func (s *PlaywrightService) ExecuteScript(env *model.TestEnv) (*ExecResult, error) {
 	if strings.TrimSpace(env.ScriptContent) == "" {
 		return nil, fmt.Errorf("脚本内容为空")
+	}
+
+	appDir := getAppDir()
+
+	// Ensure playwright npm package is available
+	if err := ensurePlaywrightInstalled(appDir); err != nil {
+		env.LastRunStatus = "failed"
+		env.LastRunOutput = fmt.Sprintf("Playwright 环境准备失败: %v", err)
+		_ = s.testEnvStore.Update(env)
+		return nil, err
 	}
 
 	// Update status to running
@@ -114,8 +163,8 @@ func (s *PlaywrightService) ExecuteScript(env *model.TestEnv) (*ExecResult, erro
 	env.LastRunAt = &now
 	_ = s.testEnvStore.Update(env)
 
-	// Write script to project scripts dir
-	scriptsDir := filepath.Join(".", "scripts_tmp")
+	// Write script to app scripts dir (relative to executable, not CWD)
+	scriptsDir := filepath.Join(appDir, "scripts_tmp")
 	_ = os.MkdirAll(scriptsDir, 0755)
 	scriptFile := filepath.Join(scriptsDir, fmt.Sprintf("pw_exec_%d_%d.ts", env.ID, time.Now().Unix()))
 	if err := os.WriteFile(scriptFile, []byte(env.ScriptContent), 0644); err != nil {
@@ -134,10 +183,13 @@ func (s *PlaywrightService) ExecuteScript(env *model.TestEnv) (*ExecResult, erro
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "npx", "tsx", scriptFile)
-	cmd.Dir = "."
+	cmd.Dir = appDir
+	// Set NODE_PATH to include the app's node_modules so 'playwright' module can be resolved
+	nodePath := filepath.Join(appDir, "node_modules")
 	cmd.Env = append(os.Environ(),
 		"TEST_URL="+testURL,
 		"TEST_NAME="+env.Name,
+		"NODE_PATH="+nodePath,
 	)
 
 	var output bytes.Buffer

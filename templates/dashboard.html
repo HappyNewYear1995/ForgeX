@@ -54,7 +54,7 @@
                 <td>{{if .Product}}{{.Product.Name}}{{end}}</td>
                 <td><code>{{.ProductVersion}}</code></td>
                 <td><span class="badge badge-env-{{.BuildEnv}}">{{.BuildEnv}}</span></td>
-                <td><span class="badge badge-{{.Status}}">{{.Status}}</span></td>
+                <td><span class="badge badge-{{.Status}}">{{statusText (printf "%s" .Status)}}</span></td>
                 <td>{{.TriggeredBy}}</td>
                 <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
             </tr>

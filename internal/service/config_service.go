@@ -137,13 +137,17 @@ func (s *ConfigService) GetByID(id uint) (*model.ConfigItem, error) {
 	return s.store.GetByID(id)
 }
 
-func (s *ConfigService) Create(name, code, description string, parentID uint, sortOrder int) (*model.ConfigItem, error) {
+func (s *ConfigService) Create(name, code, description string, parentID uint, sortOrder int, compType string) (*model.ConfigItem, error) {
 	item := &model.ConfigItem{
 		ParentID:    parentID,
 		Name:        name,
 		Code:        code,
 		Description: description,
 		SortOrder:   sortOrder,
+		Type:        model.ComponentType(compType),
+	}
+	if item.Type == "" {
+		item.Type = model.ComponentTypeBackend
 	}
 	if err := s.store.Create(item); err != nil {
 		return nil, err
@@ -151,7 +155,7 @@ func (s *ConfigService) Create(name, code, description string, parentID uint, so
 	return item, nil
 }
 
-func (s *ConfigService) Update(id uint, name, code, description string, sortOrder int) error {
+func (s *ConfigService) Update(id uint, name, code, description string, sortOrder int, compType string) error {
 	item, err := s.store.GetByID(id)
 	if err != nil {
 		return err
@@ -160,6 +164,9 @@ func (s *ConfigService) Update(id uint, name, code, description string, sortOrde
 	item.Code = code
 	item.Description = description
 	item.SortOrder = sortOrder
+	if compType != "" {
+		item.Type = model.ComponentType(compType)
+	}
 	return s.store.Update(item)
 }
 

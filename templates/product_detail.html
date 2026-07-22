@@ -4,6 +4,7 @@
 <div class="page-header">
     <h1>{{.Product.Name}} <span class="badge badge-success">{{.Product.CurrentVersion}}</span></h1>
     <div class="header-actions">
+        <button type="button" class="btn btn-build" onclick="openBuildModal({{.Product.ID}}, '{{.Product.Name}}', '{{.Product.CurrentVersion}}')">构建</button>
         <a href="/products/{{.Product.ID}}/edit" class="btn">编辑</a>
         <a href="/products" class="btn">返回</a>
     </div>
@@ -20,6 +21,10 @@
             <span class="info-value">{{.Product.Name}}</span>
         </div>
         <div class="info-item">
+            <span class="info-label">项目编码</span>
+            <span class="info-value"><code>{{.Product.Code}}</code></span>
+        </div>
+        <div class="info-item">
             <span class="info-label">当前版本</span>
             <span class="info-value"><code>{{.Product.CurrentVersion}}</code></span>
         </div>
@@ -32,9 +37,21 @@
             <span class="info-value">
                 {{if .Product.TestEnvEnabled}}
                     {{if .LinkedTestEnvs}}
-                        {{range .LinkedTestEnvs}}<span class="badge badge-env-test" style="margin-right:6px" title="{{.URL}}">{{.Name}} <span style="font-weight:400;color:#64748b;font-size:0.75rem;margin-left:2px">{{.URL}}</span></span>{{end}}
+                        {{range .LinkedTestEnvs}}<span class="badge badge-env-test" style="margin-right:6px" title="{{.URL}}">{{.Name}} <span style="font-weight:400;color:#64748b;font-size:0.75rem;margin-left:2px">{{.URL | lower}}</span></span>{{end}}
                     {{else}}<span style="color:#94a3b8">已启用，未关联环境</span>{{end}}
                 {{else}}<span style="color:#94a3b8">未启用</span>{{end}}
+            </span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Jenkins 构建任务</span>
+            <span class="info-value">
+                {{if eq .Product.JenkinsJobMode "component"}}
+                    <span class="badge badge-branch-dev">独立任务</span> <span style="color:#64748b;font-size:0.82rem">（见组件列表）</span>
+                {{else}}
+                    {{if .Product.JenkinsJobName}}
+                    <span class="badge badge-branch-dev">统一任务</span> <code>{{.Product.JenkinsJobName}}</code>
+                    {{else}}<span style="color:#94a3b8">未配置</span>{{end}}
+                {{end}}
             </span>
         </div>
     </div>
@@ -48,6 +65,7 @@
                     <th>组件名称</th>
                     <th>Git 仓库</th>
                     <th>分支过滤</th>
+                    {{if eq .Product.JenkinsJobMode "component"}}<th>Jenkins 任务</th>{{end}}
                 </tr>
             </thead>
             <tbody>
@@ -56,6 +74,7 @@
                     <td><strong>{{.Name}}</strong></td>
                     <td>{{if .GitURL}}<a href="{{.GitURL}}" target="_blank">{{.GitURL}}</a>{{else}}<span style="color:#94a3b8">未配置</span>{{end}}</td>
                     <td>{{if .BranchFilter}}<code>{{.BranchFilter}}</code>{{else}}<span style="color:#94a3b8">全部</span>{{end}}</td>
+                    {{if eq $.Product.JenkinsJobMode "component"}}<td>{{if .JenkinsJobName}}<code>{{.JenkinsJobName}}</code>{{else}}<span style="color:#94a3b8">未配置</span>{{end}}</td>{{end}}
                 </tr>
                 {{end}}
             </tbody>
@@ -73,70 +92,65 @@
         <thead>
             <tr>
                 <th>版本</th>
-                <th>环境</th>
-                <th>状态</th>
-                <th>说明</th>
+                <th>任务类型</th>
+                <th>更新说明</th>
                 <th>组件数</th>
+                <th>测试升级状态</th>
                 <th>创建时间</th>
-                <th>操作</th>
+                <th style="min-width:200px">操作</th>
             </tr>
         </thead>
         <tbody>
             {{range .Releases}}
             <tr>
                 <td><strong>{{.Version}}</strong></td>
-                <td><span class="badge badge-env-{{.BuildEnv}}">{{.BuildEnv}}</span></td>
-                <td><span class="badge badge-release-{{.Status}}">{{.Status}}</span></td>
-                <td>{{.Description}}</td>
+                <td>
+                    {{- $builds := index $.ReleaseBuilds .ID -}}
+                    {{if and $builds (index $builds "upgrade")}}<span class="badge badge-env-upgrade">升级包</span> {{end}}
+                    {{if and $builds (index $builds "full")}}<span class="badge badge-env-full">整包</span>{{end}}
+                    {{if not $builds}}<span style="color:#94a3b8">-</span>{{end}}
+                </td>
+                <td>
+                    {{- $plain := stripHtml .Description -}}
+                    {{if $plain}}
+                    <span class="badge-desc" onclick="showDescription(this)" data-full="{{.Description}}" title="{{$plain}}">{{truncate $plain 6}}</span>
+                    {{else}}<span style="color:#94a3b8">-</span>{{end}}
+                </td>
                 <td>
                     {{if .Components}}
-                    <a href="javascript:void(0)" class="comp-count-link" onclick="toggleReleaseComps('rc-{{.ID}}')">{{len .Components}} 个组件 ▸</a>
+                    <a href="javascript:void(0)" class="comp-count-link" onclick="showReleaseComps(this)" data-release-id="{{.ID}}">{{len .Components}} 个组件</a>
                     {{else}}
                     <span style="color:#94a3b8">0</span>
                     {{end}}
                 </td>
-                <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
                 <td>
-                    <a href="/releases/{{.ID}}" class="btn btn-sm">查看 Manifest</a>
-                    {{if .Build}}
-                    <button class="btn btn-sm btn-download" onclick="showArtifacts({{.Build.ID}}, this)" title="下载制品">⬇ 制品</button>
+                    {{- $scriptStatus := index $.ReleaseScriptStatus .ID -}}
+                    {{if $scriptStatus}}
+                    <span class="badge badge-script-{{$scriptStatus}}">{{statusText $scriptStatus}}</span>
+                    {{- $logOutput := index $.ReleaseScriptOutput .ID -}}
+                    {{if $logOutput}}
+                    <button class="btn btn-sm" onclick="showScriptLogModal(this)" data-output="{{$logOutput}}" data-build="{{.ID}}" title="查看升级日志" style="margin-left:4px">📝 日志</button>
+                    {{end}}
+                    {{else}}
+                    <span style="color:#94a3b8">-</span>
                     {{end}}
                 </td>
-            </tr>
-            {{if .Components}}
-            <tr class="release-comps-row" id="rc-{{.ID}}" style="display:none">
-                <td colspan="7">
-                    <div class="release-comps-panel">
-                        <div class="release-comps-header">
-                            <strong>组件版本详情</strong>
-                            <button class="btn btn-sm" onclick="toggleReleaseComps('rc-{{.ID}}')">关闭</button>
-                        </div>
-                        <table class="table table-inner">
-                            <thead>
-                                <tr>
-                                    <th>组件名称</th>
-                                    <th>组件版本</th>
-                                    <th>分支</th>
-                                    <th>制品文件</th>
-                                    <th>构建状态</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {{range .Components}}
-                                <tr>
-                                    <td><strong>{{.ComponentName}}</strong></td>
-                                    <td><code>{{.ComponentVersion}}</code></td>
-                                    <td>{{if .GitBranch}}<code>{{.GitBranch}}</code>{{else}}<span style="color:#94a3b8">-</span>{{end}}</td>
-                                    <td>{{if .ArtifactFile}}<code>{{.ArtifactFile}}</code>{{else}}<span style="color:#94a3b8">-</span>{{end}}</td>
-                                    <td><span class="badge badge-release-{{.BuildStatus}}">{{.BuildStatus}}</span></td>
-                                </tr>
-                                {{end}}
-                            </tbody>
-                        </table>
-                    </div>
+                <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+                <td style="white-space:nowrap">
+                    <button class="btn btn-sm" onclick="showManifest({{.ID}})">查看 Manifest</button>
+                    {{- $builds := index $.ReleaseBuilds .ID -}}
+                    {{if and $builds (index $builds "upgrade")}}
+                    <a href="/releases/{{.ID}}/download/upgrade" class="btn btn-sm btn-download" title="下载升级包">⬇ 升级包</a>
+                    {{else if and $builds (index $builds "full")}}
+                    <a href="/releases/{{.ID}}/download/full" class="btn btn-sm btn-download" title="下载整包">⬇ 整包</a>
+                    {{else}}
+                    <button class="btn btn-sm" disabled style="opacity:0.4;cursor:not-allowed" title="无可用制品">⬇ 下载</button>
+                    {{end}}
+                    <form method="POST" action="/releases/{{.ID}}/delete" style="display:inline" data-confirm="确定删除此版本发布记录？">
+                        <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                    </form>
                 </td>
             </tr>
-            {{end}}
             {{else}}
             <tr>
                 <td colspan="7" class="text-center">暂无版本发布记录</td>
@@ -156,13 +170,13 @@
             <tr>
                 <th>#</th>
                 <th>版本</th>
-                <th>环境</th>
+                <th>任务类型</th>
+                <th>构建组件</th>
                 <th>状态</th>
-                <th>脚本状态</th>
                 <th>Jenkins #</th>
                 <th>触发人</th>
                 <th>时间</th>
-                <th>操作</th>
+                <th style="min-width:140px">操作</th>
             </tr>
         </thead>
         <tbody>
@@ -170,39 +184,26 @@
             <tr>
                 <td>{{.ID}}</td>
                 <td><code>{{.ProductVersion}}</code></td>
-                <td><span class="badge badge-env-{{.BuildEnv}}">{{.BuildEnv}}</span></td>
-                <td><span class="badge badge-{{.Status}}">{{.Status}}</span></td>
+                <td><span class="badge badge-env-{{.BuildEnv}}">{{if eq .BuildEnv "upgrade"}}升级包{{else if eq .BuildEnv "full"}}整包{{else}}{{.BuildEnv}}{{end}}</span></td>
                 <td>
-                    {{if .ScriptRunStatus}}
-                    <span class="badge badge-script-{{.ScriptRunStatus}}">{{.ScriptRunStatus}}</span>
-                    {{if .ScriptRunOutput}}
-                    <button class="btn btn-sm btn-script-log" onclick="showScriptLog({{.ID}})">日志</button>
-                    {{end}}
+                    {{- $comps := index $.BuildComponents .ID -}}
+                    {{if $comps}}
+                        {{range $comps}}<span class="badge badge-branch-dev" style="margin:1px 2px">{{.}}</span>{{end}}
                     {{else}}
-                    <span style="color:#94a3b8">-</span>
+                        <span style="color:#94a3b8">-</span>
                     {{end}}
                 </td>
+                <td><span class="badge badge-{{.Status}}">{{statusText (printf "%s" .Status)}}</span></td>
                 <td>{{.JenkinsBuildNumber}}</td>
                 <td>{{.TriggeredBy}}</td>
                 <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
-                <td>
-                    <a href="/builds/{{.ID}}/log" target="_blank" class="btn btn-sm" title="Jenkins 构建日志">📝 日志</a>
-                    <button class="btn btn-sm btn-download" onclick="showArtifacts({{.ID}}, this)" title="下载制品">⬇ 制品</button>
+                <td style="white-space:nowrap">
+                    <button class="btn btn-sm" onclick="showBuildLog({{.ID}})" title="Jenkins 构建日志">📝 日志</button>
+                    <form method="POST" action="/builds/{{.ID}}/delete" style="display:inline" data-confirm="确定删除此构建记录？">
+                        <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                    </form>
                 </td>
             </tr>
-            {{if .ScriptRunOutput}}
-            <tr class="script-log-row" id="script-log-{{.ID}}" style="display:none">
-                <td colspan="9">
-                    <div class="script-log">
-                        <div class="script-log-header">
-                            <strong>脚本执行日志</strong>
-                            <button class="btn btn-sm" onclick="showScriptLog({{.ID}})">关闭</button>
-                        </div>
-                        <pre class="script-log-content">{{.ScriptRunOutput}}</pre>
-                    </div>
-                </td>
-            </tr>
-            {{end}}
             {{else}}
             <tr>
                 <td colspan="9" class="text-center">暂无构建记录</td>
@@ -212,58 +213,29 @@
     </table>
 </div>
 
-<!-- 制品弹窗 -->
-<div id="artifactModal" class="modal-overlay" style="display:none">
-    <div class="modal-box" style="max-width:520px">
-        <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #f1f5f9">
-            <h3 style="margin:0;font-size:1rem">构建制品</h3>
-            <button class="btn btn-sm" onclick="document.getElementById('artifactModal').style.display='none'">关闭</button>
+<!-- 脚本执行日志弹窗 -->
+<div id="scriptLogModal" class="modal-overlay" style="display:none">
+    <div class="modal-box" style="width:800px;max-width:90vw">
+        <div class="modal-header">
+            <h3 style="margin:0;font-size:1.05rem">📝 测试升级日志 - 构建 #<span id="scriptLogBuildId"></span></h3>
+            <button class="btn-close-modal" onclick="document.getElementById('scriptLogModal').style.display='none'">&times;</button>
         </div>
-        <div id="artifactModalBody" style="padding:20px;min-height:60px">
-            <div style="text-align:center;color:#94a3b8">加载中...</div>
+        <div style="padding:16px 24px">
+            <pre style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:16px;max-height:500px;overflow:auto;font-size:0.82rem;line-height:1.5;white-space:pre-wrap;word-break:break-all" id="scriptLogContent"></pre>
         </div>
     </div>
 </div>
 
 <script>
-function toggleReleaseComps(rowId) {
-    var row = document.getElementById(rowId);
-    if (!row) return;
-    row.style.display = row.style.display === 'none' ? '' : 'none';
+function showScriptLogModal(btn) {
+    var output = btn.getAttribute('data-output');
+    var buildId = btn.getAttribute('data-build');
+    document.getElementById('scriptLogBuildId').textContent = buildId;
+    document.getElementById('scriptLogContent').textContent = output;
+    document.getElementById('scriptLogModal').style.display = 'flex';
 }
-function showScriptLog(buildId) {
-    var row = document.getElementById('script-log-' + buildId);
-    if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
-}
-function showArtifacts(buildId, btn) {
-    var modal = document.getElementById('artifactModal');
-    var body = document.getElementById('artifactModalBody');
-    modal.style.display = 'flex';
-    body.innerHTML = '<div style="text-align:center;color:#94a3b8">加载中...</div>';
-
-    fetch('/builds/' + buildId + '/artifacts')
-        .then(function(r) { return r.json(); })
-        .then(function(artifacts) {
-            if (!artifacts || artifacts.length === 0) {
-                body.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px">暂无制品</div>';
-                return;
-            }
-            var html = '<table class="table" style="margin:0"><thead><tr><th>文件名</th><th>组件</th><th>大小</th><th>操作</th></tr></thead><tbody>';
-            artifacts.forEach(function(a) {
-                var size = a.file_size < 1024 ? a.file_size + ' B'
-                    : a.file_size < 1048576 ? (a.file_size / 1024).toFixed(1) + ' KB'
-                    : (a.file_size / 1048576).toFixed(1) + ' MB';
-                html += '<tr><td><code>' + a.file_name + '</code></td>'
-                    + '<td>' + (a.component_name || '-') + '</td>'
-                    + '<td>' + size + '</td>'
-                    + '<td><a href="/builds/artifacts/' + a.id + '/download" class="btn btn-sm btn-download">⬇ 下载</a></td></tr>';
-            });
-            html += '</tbody></table>';
-            body.innerHTML = html;
-        })
-        .catch(function(e) {
-            body.innerHTML = '<div style="text-align:center;color:#ef4444">加载失败: ' + e.message + '</div>';
-        });
-}
+document.getElementById('scriptLogModal').addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+});
 </script>
 {{end}}

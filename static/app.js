@@ -20,6 +20,191 @@
     }
     window.showToast = showToast;
 
+    // Build log modal
+    window.showBuildLog = function(buildId) {
+        var modal = document.getElementById('logModal');
+        var body = document.getElementById('logModalBody');
+        if (!modal) return;
+        body.textContent = '加载中...';
+        modal.style.display = 'flex';
+        fetch('/builds/' + buildId + '/log')
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.text();
+            })
+            .then(function(text) {
+                body.textContent = text || '(无日志内容)';
+            })
+            .catch(function(e) {
+                body.textContent = '加载失败: ' + e.message;
+            });
+    };
+
+    // Manifest modal
+    window.showManifest = function(releaseId) {
+        var modal = document.getElementById('manifestModal');
+        var body = document.getElementById('manifestModalBody');
+        if (!modal) return;
+        body.textContent = '加载中...';
+        modal.style.display = 'flex';
+        fetch('/api/releases/' + releaseId + '/manifest')
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function(data) {
+                body.textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(function(e) {
+                body.textContent = '加载失败: ' + e.message;
+            });
+    };
+
+    // Artifacts modal
+    window.showArtifacts = function(buildId) {
+        var modal = document.getElementById('artifactModal');
+        var body = document.getElementById('artifactModalBody');
+        if (!modal) return;
+        modal.style.display = 'flex';
+        body.innerHTML = '<div style="text-align:center;color:#94a3b8">加载中...</div>';
+        fetch('/builds/' + buildId + '/artifacts')
+            .then(function(r) { return r.json(); })
+            .then(function(artifacts) {
+                if (!artifacts || artifacts.length === 0) {
+                    body.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px">暂无制品</div>';
+                    return;
+                }
+                var html = '<table class="table" style="margin:0"><thead><tr><th>文件名</th><th>组件</th><th>大小</th><th>操作</th></tr></thead><tbody>';
+                artifacts.forEach(function(a) {
+                    var size = a.file_size < 1024 ? a.file_size + ' B'
+                        : a.file_size < 1048576 ? (a.file_size / 1024).toFixed(1) + ' KB'
+                        : (a.file_size / 1048576).toFixed(1) + ' MB';
+                    html += '<tr><td><code>' + a.file_name + '</code></td>'
+                        + '<td>' + (a.component_name || '-') + '</td>'
+                        + '<td>' + size + '</td>'
+                        + '<td><a href="/builds/artifacts/' + a.id + '/download" class="btn btn-sm btn-download">⬇ 下载</a></td></tr>';
+                });
+                html += '</tbody></table>';
+                body.innerHTML = html;
+            })
+            .catch(function(e) {
+                body.innerHTML = '<div style="text-align:center;color:#ef4444">加载失败: ' + e.message + '</div>';
+            });
+    };
+
+    // Delete release from expandable list (AJAX, no page reload)
+    window.deleteReleaseFromList = function(btn, releaseId) {
+        var modal = document.getElementById('confirmModal');
+        var msgEl = document.getElementById('confirmModalMsg');
+        var okBtn = document.getElementById('confirmOk');
+        var cancelBtn = document.getElementById('confirmCancel');
+        if (!modal) return;
+        msgEl.textContent = '确定删除此版本发布记录？';
+        modal.style.display = 'flex';
+
+        function closeConfirm() {
+            modal.style.display = 'none';
+            okBtn.replaceWith(okBtn.cloneNode(true));
+            cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+        }
+
+        document.getElementById('confirmCancel').onclick = closeConfirm;
+        document.getElementById('confirmOk').onclick = function() {
+            closeConfirm();
+            btn.disabled = true;
+            btn.textContent = '删除中...';
+            fetch('/releases/' + releaseId + '/delete', {
+                method: 'POST',
+                redirect: 'manual'
+            }).then(function(resp) {
+                if (resp.type === 'opaqueredirect' || resp.ok) {
+                    var tr = btn.closest('tr[data-release-id]');
+                    if (tr) tr.remove();
+                    // Check if list is now empty
+                    var tbody = btn.closest('tbody');
+                    if (tbody && tbody.children.length === 0) {
+                        var expandRow = btn.closest('.row-expand');
+                        if (expandRow) {
+                            var empty = expandRow.querySelector('.expand-empty');
+                            var table = expandRow.querySelector('.table-nested');
+                            if (empty) empty.style.display = '';
+                            if (table) table.style.display = 'none';
+                        }
+                    }
+                    showToast('✅ 已删除', 2000);
+                } else {
+                    btn.disabled = false;
+                    btn.textContent = '删除';
+                    showToast('❌ 删除失败', 3000);
+                }
+            }).catch(function(err) {
+                btn.disabled = false;
+                btn.textContent = '删除';
+                showToast('❌ 删除失败: ' + err.message, 3000);
+            });
+        };
+    };
+
+    // Description modal
+    window.showDescription = function(el) {
+        var modal = document.getElementById('descModal');
+        var body = document.getElementById('descModalBody');
+        if (!modal) return;
+        var text = el.getAttribute('data-full') || '';
+        // Render as HTML if it contains tags (from Quill editor), else as plain text
+        if (text.indexOf('<') !== -1) {
+            body.innerHTML = text;
+        } else {
+            body.textContent = text;
+        }
+        modal.style.display = 'flex';
+    };
+
+    // HTML escape helper for data attributes
+    function escapeAttr(s) {
+        if (!s) return '';
+        return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    // Strip HTML tags for plain text preview
+    function stripHtml(html) {
+        if (!html) return '';
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        return tmp.textContent || tmp.innerText || '';
+    }
+
+    // Release components modal
+    window.showReleaseComps = function(el) {
+        var releaseId = el.getAttribute('data-release-id');
+        var modal = document.getElementById('compsModal');
+        var body = document.getElementById('compsModalBody');
+        if (!modal) return;
+        body.innerHTML = '<div style="text-align:center;color:#94a3b8">加载中...</div>';
+        modal.style.display = 'flex';
+        fetch('/api/releases/' + releaseId + '/manifest')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                // Try to extract components from manifest
+                var comps = data.components || data;
+                if (Array.isArray(comps) && comps.length > 0) {
+                    var html = '<table class="table" style="margin:0"><thead><tr><th>组件名称</th><th>版本</th><th>分支</th><th>制品</th></tr></thead><tbody>';
+                    comps.forEach(function(c) {
+                        html += '<tr><td><strong>' + (c.component_name || c.name || '-') + '</strong></td>'
+                            + '<td><code>' + (c.component_version || c.version || '-') + '</code></td>'
+                            + '<td>' + (c.git_branch || c.branch || '<span style="color:#94a3b8">-</span>') + '</td>'
+                            + '<td>' + (c.artifact_file || '<span style="color:#94a3b8">-</span>') + '</td></tr>';
+                    });
+                    html += '</tbody></table>';
+                    body.innerHTML = html;
+                } else {
+                    body.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px">暂无组件数据</div>';
+                }
+            })
+            .catch(function(e) {
+                body.innerHTML = '<div style="text-align:center;color:#ef4444">加载失败: ' + e.message + '</div>';
+            });
+    };
+
     // Check URL for saved parameter
     var params = new URLSearchParams(window.location.search);
     var saved = params.get('saved');
@@ -225,6 +410,16 @@
             })
             .catch(function() {
                 select.innerHTML = '<option value="">加载失败</option>';
+                // Remove any existing manual input first
+                var existing = select.parentElement.querySelector('.branch-manual-input');
+                if (existing) existing.remove();
+                var input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'branch-select branch-manual-input';
+                input.placeholder = '\u8F93\u5165\u5206\u652F\u540D';
+                input.name = select.name;
+                select.removeAttribute('name'); // prevent select from being submitted
+                select.parentElement.insertBefore(input, select.nextSibling);
             });
     }
 
@@ -311,14 +506,30 @@
                         var tbody = table.querySelector('tbody');
                         releases.forEach(function(rel) {
                             var tr = document.createElement('tr');
+                            tr.setAttribute('data-release-id', rel.id);
                             var date = rel.created_at ? new Date(rel.created_at).toLocaleString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-';
+                            var desc = rel.description || '';
+                            var descPlain = stripHtml(desc);
+                            var descShort = descPlain.length > 6 ? '<span class="badge-desc" onclick="showDescription(this)" data-full="' + escapeAttr(desc) + '" title="' + escapeAttr(descPlain) + '">' + descPlain.substring(0,6) + '...</span>' : (descPlain ? '<span class="badge-desc" onclick="showDescription(this)" data-full="' + escapeAttr(desc) + '" title="' + escapeAttr(descPlain) + '">' + descPlain + '</span>' : '<span style="color:#94a3b8">-</span>');
+                            var compCount = rel.components ? rel.components.length : 0;
+                            var compCell = compCount > 0 ? '<a href="javascript:void(0)" class="comp-count-link" onclick="showReleaseComps(this)" data-release-id="' + rel.id + '">' + compCount + ' 个组件</a>' : '<span style="color:#94a3b8">0</span>';
+                            var bt = rel.build_types || {};
+                            var actions = '<div style="white-space:nowrap">';
+                            actions += '<button class="btn btn-sm" onclick="showManifest(' + rel.id + ')">查看 Manifest</button> ';
+                            if (bt.upgrade) {
+                                actions += '<a href="/releases/' + rel.id + '/download/upgrade" class="btn btn-sm btn-download" title="下载升级包">⬇ 升级包</a> ';
+                            } else if (bt.full) {
+                                actions += '<a href="/releases/' + rel.id + '/download/full" class="btn btn-sm btn-download" title="下载整包">⬇ 整包</a> ';
+                            } else {
+                                actions += '<button class="btn btn-sm" disabled style="opacity:0.4;cursor:not-allowed" title="无可用制品">⬇ 下载</button> ';
+                            }
+                            actions += '</div>';
                             tr.innerHTML =
                                 '<td><strong>' + (rel.version||'') + '</strong></td>' +
-                                '<td><span class="badge badge-env-' + (rel.build_env||'') + '">' + (rel.build_env||'') + '</span></td>' +
-                                '<td><span class="badge badge-release-' + (rel.status||'') + '">' + (rel.status||'') + '</span></td>' +
-                                '<td>' + (rel.description||'-') + '</td>' +
+                                '<td>' + descShort + '</td>' +
+                                '<td>' + compCell + '</td>' +
                                 '<td>' + date + '</td>' +
-                                '<td><a href="/releases/' + rel.id + '" class="btn btn-sm">Manifest</a></td>';
+                                '<td>' + actions + '</td>';
                             tbody.appendChild(tr);
                         });
                         table.style.display = '';
@@ -337,8 +548,133 @@
         var configDiv = document.getElementById('compConfig_' + compId);
         if (configDiv) {
             configDiv.style.display = checkbox.checked ? '' : 'none';
+            if (checkbox.checked) {
+                // Load Jenkins jobs for component select if in component mode
+                var mode = document.querySelector('input[name="jenkins_job_mode"]:checked');
+                if (mode && mode.value === 'component') {
+                    var select = configDiv.querySelector('.jenkins-job-select');
+                    if (select) loadJenkinsJobsForSelect(select);
+                }
+            }
         }
     };
+
+    // Jenkins jobs cache
+    var jenkinsJobsCache = null;
+    var jenkinsJobsPromise = null;
+
+    function loadJenkinsJobsForSelect(selectEl) {
+        if (!selectEl || selectEl.getAttribute('data-loaded') === 'true') return;
+        selectEl.setAttribute('data-loaded', 'true');
+
+        if (jenkinsJobsCache) {
+            populateJobSelect(selectEl, jenkinsJobsCache);
+            return;
+        }
+        if (!jenkinsJobsPromise) {
+            jenkinsJobsPromise = fetch('/api/jenkins/jobs')
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    jenkinsJobsCache = d.jobs || [];
+                    return jenkinsJobsCache;
+                })
+                .catch(function() {
+                    jenkinsJobsCache = [];
+                    return [];
+                });
+        }
+        jenkinsJobsPromise.then(function(jobs) {
+            populateJobSelect(selectEl, jobs);
+        });
+    }
+
+    function populateJobSelect(selectEl, jobs) {
+        var selected = selectEl.getAttribute('data-selected') || '';
+        var html = '<option value="">不绑定</option>';
+        jobs.forEach(function(job) {
+            var sel = (job === selected) ? ' selected' : '';
+            html += '<option value="' + job + '"' + sel + '>' + job + '</option>';
+        });
+        selectEl.innerHTML = html;
+    }
+
+    // On page load: populate Jenkins jobs for already-checked components (edit mode)
+    document.addEventListener('DOMContentLoaded', function() {
+        // Load jobs for project-level select
+        var projectSelect = document.querySelector('.jenkins-job-select-project');
+        if (projectSelect) {
+            loadJenkinsJobsForProjectSelect(projectSelect);
+        }
+        // Load jobs for component-level selects if in component mode
+        var mode = document.querySelector('input[name="jenkins_job_mode"]:checked');
+        if (mode && mode.value === 'component') {
+            document.querySelectorAll('.jenkins-job-select').forEach(function(select) {
+                var configDiv = select.closest('.comp-config-fields');
+                if (configDiv && configDiv.style.display !== 'none') {
+                    loadJenkinsJobsForSelect(select);
+                }
+            });
+        }
+    });
+
+    // Switch Jenkins binding mode
+    window.switchJenkinsMode = function(mode) {
+        var projectFields = document.getElementById('projectJobFields');
+        if (projectFields) projectFields.style.display = (mode === 'project') ? '' : 'none';
+        // Toggle per-component Jenkins fields
+        document.querySelectorAll('.comp-jenkins-field').forEach(function(el) {
+            el.style.display = (mode === 'component') ? '' : 'none';
+        });
+        if (mode === 'project') {
+            var projectSelect = document.querySelector('.jenkins-job-select-project');
+            if (projectSelect) loadJenkinsJobsForProjectSelect(projectSelect);
+        }
+        // Load jobs for visible component selects when switching to component mode
+        if (mode === 'component') {
+            document.querySelectorAll('.jenkins-job-select').forEach(function(select) {
+                var field = select.closest('.comp-jenkins-field');
+                if (field && field.style.display !== 'none') {
+                    loadJenkinsJobsForSelect(select);
+                }
+            });
+        }
+    };
+
+    // Load Jenkins jobs for project-level select
+    function loadJenkinsJobsForProjectSelect(selectEl) {
+        if (!selectEl || selectEl.getAttribute('data-loaded') === 'true') return;
+        selectEl.setAttribute('data-loaded', 'true');
+
+        if (jenkinsJobsCache) {
+            populateProjectJobSelect(selectEl, jenkinsJobsCache);
+            return;
+        }
+        if (!jenkinsJobsPromise) {
+            jenkinsJobsPromise = fetch('/api/jenkins/jobs')
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    jenkinsJobsCache = d.jobs || [];
+                    return jenkinsJobsCache;
+                })
+                .catch(function() {
+                    jenkinsJobsCache = [];
+                    return [];
+                });
+        }
+        jenkinsJobsPromise.then(function(jobs) {
+            populateProjectJobSelect(selectEl, jobs);
+        });
+    }
+
+    function populateProjectJobSelect(selectEl, jobs) {
+        var selected = selectEl.getAttribute('data-selected') || '';
+        var html = '<option value="">请选择 Jenkins 任务</option>';
+        jobs.forEach(function(job) {
+            var sel = (job === selected) ? ' selected' : '';
+            html += '<option value="' + job + '"' + sel + '>' + job + '</option>';
+        });
+        selectEl.innerHTML = html;
+    }
     // Toggle all modules for a component (build modal)
     window.toggleAllMods = function(link) {
         var comp = link.closest('.config-comp');
@@ -466,8 +802,16 @@
         document.getElementById('isFormal').checked = false;
         document.getElementById('versionInputGroup').style.display = 'none';
         document.getElementById('releaseNotesGroup').style.display = 'none';
+        // Reset Quill editor if exists
+        if (window._quillEditor) {
+            window._quillEditor.setText('');
+        }
+        document.getElementById('releaseNotesHidden').value = '';
         document.querySelector('input[name="auto_sync_test"]').checked = true;
         document.querySelector('input[name="build_type"][value="upgrade"]').checked = true;
+        // Reset component selection visibility
+        var configGroup = document.getElementById('configTreeGroup');
+        if (configGroup) configGroup.style.display = '';
         // Pre-fill version as default value (hidden until checkbox is ticked)
         var versionInput = document.getElementById('buildVersion');
         versionInput.value = '';
@@ -493,7 +837,29 @@
     };
     window.toggleReleaseNotes = function() {
         var checked = document.getElementById('isFormal').checked;
-        document.getElementById('releaseNotesGroup').style.display = checked ? '' : 'none';
+        var group = document.getElementById('releaseNotesGroup');
+        group.style.display = checked ? '' : 'none';
+        if (checked && !window._quillEditor && typeof Quill !== 'undefined') {
+            window._quillEditor = new Quill('#releaseNotesEditor', {
+                theme: 'snow',
+                placeholder: '变更说明...',
+                modules: {
+                    toolbar: [
+                        ['bold', 'italic', 'underline'],
+                        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                        ['clean']
+                    ]
+                }
+            });
+        }
+    };
+    // Toggle component selection visibility based on build type
+    window.toggleBuildType = function() {
+        var buildType = document.querySelector('input[name="build_type"]:checked').value;
+        var group = document.getElementById('configTreeGroup');
+        if (group) {
+            group.style.display = (buildType === 'full') ? 'none' : '';
+        }
     };
     // Close build modal on backdrop click
     (function() {
@@ -503,6 +869,66 @@
                 if (e.target === bm) closeBuildModal();
             });
         }
+    })();
+
+    // Build form AJAX submit with confirmation
+    (function() {
+        var buildForm = document.getElementById('buildForm');
+        if (!buildForm) return;
+        buildForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            // Show confirmation dialog
+            var modal = document.getElementById('confirmModal');
+            var msgEl = document.getElementById('confirmModalMsg');
+            var okBtn = document.getElementById('confirmOk');
+            var cancelBtn = document.getElementById('confirmCancel');
+            if (!modal) return;
+            msgEl.textContent = '确认触发构建？';
+            modal.style.display = 'flex';
+
+            function closeConfirm() {
+                modal.style.display = 'none';
+                okBtn.replaceWith(okBtn.cloneNode(true));
+                cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+            }
+
+            document.getElementById('confirmCancel').onclick = closeConfirm;
+            document.getElementById('confirmOk').onclick = function() {
+                closeConfirm();
+                // Sync Quill editor content to hidden input
+                var hiddenInput = document.getElementById('releaseNotesHidden');
+                if (window._quillEditor && hiddenInput) {
+                    var html = window._quillEditor.root.innerHTML;
+                    // Quill returns <p><br></p> for empty content
+                    hiddenInput.value = (html === '<p><br></p>' || html === '') ? '' : html;
+                }
+                var submitBtn = buildForm.querySelector('button[type=submit]');
+                var origText = submitBtn ? submitBtn.textContent : '';
+                if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '提交中...'; }
+                var formData = new URLSearchParams(new FormData(buildForm));
+                fetch(buildForm.action, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: formData.toString(),
+                    redirect: 'manual'
+                }).then(function(resp) {
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = origText; }
+                    closeBuildModal();
+                    if (resp.type === 'opaqueredirect' || resp.ok) {
+                        showToast('✅ 构建任务已发送', 3000);
+                        // Refresh product detail page after build submission
+                        if (/^\/products\/\d+$/.test(window.location.pathname)) {
+                            setTimeout(function() { window.location.reload(); }, 1500);
+                        }
+                    } else {
+                        showToast('❌ 触发构建失败', 4000);
+                    }
+                }).catch(function(err) {
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = origText; }
+                    showToast('❌ 触发构建失败: ' + err.message, 4000);
+                });
+            };
+        });
     })();
 
     // Card collapse/expand
@@ -515,6 +941,71 @@
         if (textEl) textEl.textContent = collapsed ? '展开' : '缩起';
         if (id) {
             try { localStorage.setItem('collapse_' + id, collapsed ? '1' : '0'); } catch(e) {}
+        }
+    };
+
+    // Toggle all cards expand/collapse (single toggle button)
+    window.toggleAllCards = function() {
+        var cards = document.querySelectorAll('.card[data-collapse-id]');
+        var allCollapsed = true;
+        cards.forEach(function(card) { if (!card.classList.contains('collapsed')) allCollapsed = false; });
+        var expand = allCollapsed;
+        cards.forEach(function(card) {
+            var id = card.getAttribute('data-collapse-id');
+            var collapsed = !expand;
+            card.classList.toggle('collapsed', collapsed);
+            var textEl = card.querySelector('.collapse-text');
+            if (textEl) textEl.textContent = collapsed ? '展开' : '缩起';
+            if (id) {
+                try { localStorage.setItem('collapse_' + id, collapsed ? '1' : '0'); } catch(e) {}
+            }
+        });
+        var btn = document.getElementById('toggleAllBtn');
+        if (btn) btn.textContent = expand ? '全部缩起' : '全部展开';
+    };
+
+    // AJAX form submit for config page (no page jump)
+    function initAjaxForms() {
+        document.addEventListener('submit', function(e) {
+            var form = e.target;
+            if (!form.hasAttribute('data-ajax-form')) return;
+            if (form.getAttribute('data-confirm')) return;
+            e.preventDefault();
+            var btn = form.querySelector('button[type=submit]');
+            var origText = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = '保存中...'; }
+            var formData = new URLSearchParams(new FormData(form));
+            fetch(form.action, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: formData.toString(),
+                redirect: 'manual'
+            }).then(function() {
+                showToast('✅ 保存成功', 2000);
+                sessionStorage.setItem('configScrollY', window.scrollY.toString());
+                setTimeout(function() { window.location.href = '/config'; }, 600);
+            }).catch(function(err) {
+                if (btn) { btn.disabled = false; btn.textContent = origText; }
+                showToast('❌ 保存失败: ' + err.message, 4000);
+            });
+        }, true);
+
+        // Restore scroll position after AJAX reload
+        var savedY = sessionStorage.getItem('configScrollY');
+        if (savedY !== null && window.location.pathname === '/config') {
+            sessionStorage.removeItem('configScrollY');
+            var y = parseInt(savedY, 10) || 0;
+            setTimeout(function() { window.scrollTo(0, y); }, 50);
+        }
+    }
+    window.toggleAddForm = function(formId) {
+        var form = document.getElementById(formId);
+        if (!form) return;
+        var isHidden = form.style.display === 'none';
+        form.style.display = isHidden ? '' : 'none';
+        if (isHidden) {
+            var firstInput = form.querySelector('input:not([type=hidden])');
+            if (firstInput) firstInput.focus();
         }
     };
 
@@ -572,8 +1063,21 @@
             e.stopPropagation();
             var actionType = modal.getAttribute('data-pending-action');
             var actionUrl = modal.getAttribute('data-pending-url');
+            var isAjaxForm = modal.getAttribute('data-ajax-form') === 'true';
             closeModal();
-            if (actionType === 'form' && actionUrl) {
+            if (isAjaxForm && actionUrl) {
+                fetch(actionUrl, { method: 'POST', redirect: 'manual' })
+                    .then(function() {
+                        showToast('✅ 操作成功', 2000);
+                        sessionStorage.setItem('configScrollY', window.scrollY.toString());
+                        setTimeout(function() { window.location.href = '/config'; }, 600);
+                    })
+                    .catch(function() {
+                        showToast('✅ 操作成功', 2000);
+                        sessionStorage.setItem('configScrollY', window.scrollY.toString());
+                        setTimeout(function() { window.location.href = '/config'; }, 600);
+                    });
+            } else if (actionType === 'form' && actionUrl) {
                 fetch(actionUrl, { method: 'POST', redirect: 'follow' })
                     .then(function() { window.location.reload(); })
                     .catch(function() { window.location.reload(); });
@@ -589,6 +1093,8 @@
             msgEl.textContent = msg;
             modal.setAttribute('data-pending-action', 'form');
             modal.setAttribute('data-pending-url', form.action);
+            if (form.hasAttribute('data-ajax-form')) modal.setAttribute('data-ajax-form', 'true');
+            else modal.removeAttribute('data-ajax-form');
             modal.style.display = 'flex';
         }, true);
 
@@ -614,6 +1120,17 @@
     var smEnvId = null;
     var smData = {};
 
+    // Helper: apply Prism.js highlighting to the script preview
+    function highlightPreview(code) {
+        var el = document.getElementById('smPreviewCode');
+        if (!el) return;
+        el.textContent = code || '暂无脚本内容';
+        if (code && typeof Prism !== 'undefined') {
+            el.className = 'script-preview-code language-javascript';
+            Prism.highlightElement(el);
+        }
+    }
+
     // Load script data from embedded JSON
     (function() {
         var el = document.getElementById('scriptData');
@@ -632,7 +1149,7 @@
         document.getElementById('smTime').textContent = d.time || '';
         // preview
         var code = d.content || '';
-        document.getElementById('smPreviewCode').textContent = code || '暂无脚本内容';
+        highlightPreview(code);
         document.getElementById('smPreview').style.display = '';
         document.getElementById('smEditor').style.display = 'none';
         document.getElementById('smRecording').style.display = 'none';
@@ -654,7 +1171,35 @@
 
     window.startRecording = function() {
         if (!smEnvId) return;
-        if (!confirm('即将启动 Playwright 录制浏览器。\n\n操作步骤：\n1. 在浏览器中完成升级操作\n2. 点击 Playwright Inspector 窗口的「录制」按钮停止录制\n3. 关闭浏览器窗口\n\n⚠ 必须先点击「录制」按钮停止录制，否则不会生成脚本文件。')) return;
+        var modal = document.getElementById('recordingConfirmModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'recordingConfirmModal';
+            modal.className = 'modal-overlay';
+            modal.style.zIndex = '10000';
+            modal.innerHTML = '<div class="modal-box" style="width:580px;max-width:90vw;text-align:left">' +
+                '<div class="modal-header"><h3 style="margin:0;font-size:1.05rem">🎬 \u5F55\u5236\u786E\u8BA4</h3>' +
+                '<button class="btn-close-modal" onclick="document.getElementById(\'recordingConfirmModal\').style.display=\'none\'">&times;</button></div>' +
+                '<div style="padding:20px 24px" id="recordingConfirmMsg"></div>' +
+                '<div style="text-align:right;padding:14px 24px;border-top:1px solid #f1f5f9;background:#f8fafc;border-radius:0 0 12px 12px">' +
+                '<button class="btn" onclick="document.getElementById(\'recordingConfirmModal\').style.display=\'none\'">\u53D6\u6D88</button>' +
+                '<button class="btn btn-primary" style="margin-left:8px" onclick="confirmStartRecording()">\u5F00\u59CB\u5F55\u5236</button></div></div>';
+            document.body.appendChild(modal);
+        }
+        var msg = document.getElementById('recordingConfirmMsg');
+        msg.innerHTML = '<p style="margin:0 0 12px;color:#334155">\u5373\u5C06\u542F\u52A8 Playwright \u5F55\u5236\u6D4F\u89C8\u5668\uFF0C\u8BF7\u6309\u4EE5\u4E0B\u6B65\u9AA4\u64CD\u4F5C\uFF1A</p>' +
+            '<ol style="margin:0;padding-left:20px;color:#475569;line-height:1.8">' +
+            '<li>\u5728\u6D4F\u89C8\u5668\u4E2D\u5B8C\u6210\u5347\u7EA7\u64CD\u4F5C</li>' +
+            '<li>\u5728 Playwright Inspector \u7A97\u53E3\u70B9\u51FB\u300CRecord\u300D\u6309\u94AE\u505C\u6B62\u5F55\u5236</li>' +
+            '<li>\u5173\u95ED\u6D4F\u89C8\u5668\u7A97\u53E3</li></ol>' +
+            '<div style="margin-top:14px;padding:10px 14px;background:#fef2f2;border-radius:6px;color:#dc2626;font-size:0.85rem">' +
+            '⚠ \u5FC5\u987B\u5148\u70B9\u51FB\u300CRecord\u300D\u6309\u94AE\u505C\u6B62\u5F55\u5236\uFF0C\u5426\u5219\u4E0D\u4F1A\u751F\u6210\u811A\u672C\u6587\u4EF6</div>';
+        modal.style.display = 'flex';
+    };
+
+    window.confirmStartRecording = function() {
+        var modal = document.getElementById('recordingConfirmModal');
+        if (modal) modal.style.display = 'none';
         document.getElementById('smPreview').style.display = 'none';
         document.getElementById('smEditor').style.display = 'none';
         document.getElementById('smRecording').style.display = 'flex';
@@ -665,7 +1210,7 @@
             .catch(function(err) {
                 document.getElementById('smRecording').style.display = 'none';
                 document.getElementById('smPreview').style.display = '';
-                showToast('录制失败: ' + err.message, 'error');
+                showToast('录制失败: ' + err.message, 4000);
             });
     };
 
@@ -679,16 +1224,16 @@
                     document.getElementById('smRecording').style.display = 'none';
                     document.getElementById('smPreview').style.display = '';
                     if (d.error) {
-                        showToast('录制失败: ' + d.error, 'error');
+                        showToast('录制失败: ' + d.error, 4000);
                     } else {
                         var code = d.content || '';
-                        document.getElementById('smPreviewCode').textContent = code || '暂无脚本内容';
+                        highlightPreview(code);
                         document.getElementById('smTextarea').value = code;
                         if (smData[smEnvId]) smData[smEnvId].content = code;
-                        showToast('录制完成，脚本已保存', 'success');
+                        showToast('录制完成，脚本已保存', 3000);
                     }
                 })
-                .catch(function(err) { clearInterval(iv); showToast('轮询失败: ' + err.message, 'error'); });
+                .catch(function(err) { clearInterval(iv); showToast('轮询失败: ' + err.message, 4000); });
         }, 2000);
     }
 
@@ -713,14 +1258,35 @@
         })
         .then(function(r) { return r.json(); })
         .then(function(d) {
-            if (d.error) { showToast(d.error, 'error'); return; }
+            if (d.error) { showToast(d.error, 4000); return; }
             if (!smData[smEnvId]) smData[smEnvId] = {};
             smData[smEnvId].content = content;
-            document.getElementById('smPreviewCode').textContent = content || '暂无脚本内容';
+            highlightPreview(content);
             toggleSmEdit();
-            showToast('保存成功', 'success');
+            showToast('保存成功', 2000);
         })
-        .catch(function(err) { showToast('保存失败: ' + err.message, 'error'); });
+        .catch(function(err) { showToast('保存失败: ' + err.message, 4000); });
+    };
+
+    // Insert file upload operation into script textarea
+    window.insertFileOp = function() {
+        var filename = prompt('请输入制品文件名（例如：acis_main_3.1.2_upgrade.zip）：', '');
+        if (!filename) return;
+        var snippet = "await page.locator('iframe').contentFrame().locator('input[type=\"file\"]').setInputFiles('" + filename + "');";
+        var ta = document.getElementById('smTextarea');
+        if (!ta) return;
+        var start = ta.selectionStart;
+        var end = ta.selectionEnd;
+        var before = ta.value.substring(0, start);
+        var after = ta.value.substring(end);
+        // Insert with proper indentation (newline before if not at start)
+        var insert = snippet;
+        if (before.length > 0 && !before.endsWith('\n')) insert = '\n' + insert;
+        if (after.length > 0 && !after.startsWith('\n')) insert = insert + '\n';
+        ta.value = before + insert + after;
+        ta.selectionStart = ta.selectionEnd = start + insert.length;
+        ta.focus();
+        showToast('已插入文件上传操作', 2000);
     };
 
     window.runScriptExec = function() {
@@ -738,7 +1304,7 @@
             .then(function() { pollExecStatus(); })
             .catch(function(err) {
                 btn.disabled = false; btn.textContent = '执行';
-                showToast('启动失败: ' + err.message, 'error');
+                showToast('启动失败: ' + err.message, 4000);
             });
     };
 
@@ -764,7 +1330,7 @@
                         document.getElementById('smTime').textContent = d.last_run || '';
                     }
                 })
-                .catch(function(err) { clearInterval(iv); showToast('轮询失败: ' + err.message, 'error'); });
+                .catch(function(err) { clearInterval(iv); showToast('轮询失败: ' + err.message, 4000); });
         }, 2000);
     }
 
@@ -779,6 +1345,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             checkRunningBuilds();
             initConfirmModal();
+            initAjaxForms();
             initExpandRows();
             initConfigTree();
             initCollapse();
@@ -786,8 +1353,10 @@
     } else {
         checkRunningBuilds();
         initConfirmModal();
+        initAjaxForms();
         initExpandRows();
         initConfigTree();
         initCollapse();
     }
+
 })();

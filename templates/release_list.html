@@ -26,12 +26,15 @@
                 <td>{{if .Product}}{{.Product.Name}}{{end}}</td>
                 <td><strong>{{.Version}}</strong></td>
                 <td><span class="badge badge-env-{{.BuildEnv}}">{{.BuildEnv}}</span></td>
-                <td><span class="badge badge-release-{{.Status}}">{{.Status}}</span></td>
+                <td><span class="badge badge-release-{{.Status}}">{{statusText .Status}}</span></td>
                 <td>{{.Description}}</td>
                 <td>{{len .Components}}</td>
                 <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
                 <td>
-                    <a href="/releases/{{.ID}}" class="btn btn-sm">Manifest</a>
+                    <button class="btn btn-sm" onclick="showManifest({{.ID}})">Manifest</button>
+                    {{if .Build}}
+                    <button class="btn btn-sm btn-download" onclick="showArtifacts({{.Build.ID}})" title="下载制品">⬇ 制品</button>
+                    {{end}}
                 </td>
             </tr>
             {{else}}

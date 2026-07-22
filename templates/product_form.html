@@ -17,6 +17,11 @@
                    value="{{if .Product}}{{.Product.Name}}{{end}}" required placeholder="如 ACIS">
         </div>
         <div class="form-group">
+            <label for="code">项目编码 *</label>
+            <input type="text" id="code" name="code" class="form-input"
+                   value="{{if .Product}}{{.Product.Code}}{{end}}" required placeholder="如 main，用于制品命名">
+        </div>
+        <div class="form-group">
             <label for="description">描述</label>
             <textarea id="description" name="description" class="form-input" rows="3">{{if .Product}}{{.Product.Description}}{{end}}</textarea>
         </div>
@@ -24,6 +29,27 @@
             <label for="current_version">当前版本号 <span style="color:#94a3b8;font-weight:400;font-size:0.8rem">(AA.BB.CC.DD)</span></label>
             <input type="text" id="current_version" name="current_version" class="form-input"
                    value="{{if .Product}}{{.Product.CurrentVersion}}{{else}}0.0.0.0{{end}}" placeholder="AA.BB.CC.DD" pattern="\d+\.\d+\.\d+\.\d+" title="版本号格式为 AA.BB.CC.DD，每段为非负整数">
+        </div>
+
+        <!-- Jenkins 任务绑定模式 -->
+        {{$mode := "project"}}{{if .Product}}{{if .Product.JenkinsJobMode}}{{$mode = .Product.JenkinsJobMode}}{{end}}{{end}}
+        <div class="form-group">
+            <label>Jenkins 构建任务</label>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+                <label class="build-toggle-label">
+                    <input type="radio" name="jenkins_job_mode" value="project" {{if eq $mode "project"}}checked{{end}} onchange="switchJenkinsMode('project')">
+                    <span>统一任务 — 全部组件通过一个 Job 构建</span>
+                </label>
+                <div id="projectJobFields" style="{{if ne $mode "project"}}display:none{{end}}margin-left:24px">
+                    <select name="jenkins_job_name" class="form-input jenkins-job-select-project" data-selected="{{if .Product}}{{.Product.JenkinsJobName}}{{end}}">
+                        <option value="">加载中...</option>
+                    </select>
+                </div>
+                <label class="build-toggle-label">
+                    <input type="radio" name="jenkins_job_mode" value="component" {{if eq $mode "component"}}checked{{end}} onchange="switchJenkinsMode('component')">
+                    <span>独立任务 — 每个组件绑定各自的 Job</span>
+                </label>
+            </div>
         </div>
 
         <!-- 组件选择 -->
@@ -48,9 +74,15 @@
                                 <div class="repo-dropdown" style="display:none"></div>
                             </div>
                         </div>
-                        <div class="form-group" style="margin-bottom:0">
+                        <div class="form-group" style="margin-bottom:8px">
                             <label>分支/Tag 过滤条件</label>
                             <input type="text" name="comp_branch_filter_{{.ID}}" class="form-input" placeholder="如 release/* 或 v*" {{if $sel}}value="{{$sel.BranchFilter}}"{{end}}>
+                        </div>
+                        <div class="form-group comp-jenkins-field" style="margin-bottom:0;{{if ne (or $.JenkinsJobMode "project") "component"}}display:none{{end}}">
+                            <label>Jenkins 任务 <span style="color:#94a3b8;font-weight:400;font-size:0.8rem">(绑定触发构建的 Job)</span></label>
+                            <select name="comp_jenkins_job_{{.ID}}" class="form-input jenkins-job-select" data-comp-id="{{.ID}}" data-selected="{{if $sel}}{{$sel.JenkinsJobName}}{{end}}">
+                                <option value="">加载中...</option>
+                            </select>
                         </div>
                     </div>
                 </div>

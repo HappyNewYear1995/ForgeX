@@ -2,7 +2,7 @@
 
 {{define "content"}}
 <div class="page-header">
-    <h1>{{.Release.Version}} <span class="badge badge-release-{{.Release.Status}}">{{.Release.Status}}</span></h1>
+    <h1>{{.Release.Version}} <span class="badge badge-release-{{.Release.Status}}">{{statusText .Release.Status}}</span></h1>
     <div class="header-actions">
         <a href="/releases" class="btn">返回列表</a>
     </div>
@@ -23,7 +23,7 @@
     </div>
     <div class="info-item">
         <span class="info-label">状态</span>
-        <span class="info-value"><span class="badge badge-release-{{.Release.Status}}">{{.Release.Status}}</span></span>
+        <span class="info-value"><span class="badge badge-release-{{.Release.Status}}">{{statusText .Release.Status}}</span></span>
     </div>
     <div class="info-item">
         <span class="info-label">说明</span>
@@ -47,6 +47,7 @@
                 <th>版本</th>
                 <th>Git 分支/Tag</th>
                 <th>Git Commit</th>
+                <th>提交消息</th>
                 <th>制品文件</th>
                 <th>构建状态</th>
             </tr>
@@ -58,12 +59,13 @@
                 <td><code>{{.ComponentVersion}}</code></td>
                 <td><code>{{.GitBranch}}</code></td>
                 <td><code>{{if .GitCommit}}{{.GitCommit}}{{else}}-{{end}}</code></td>
+                <td>{{if .GitCommitMessage}}<span style="font-size:0.82rem;color:#475569" title="{{.GitCommitMessage}}">{{truncate .GitCommitMessage 30}}</span>{{else}}<span style="color:#94a3b8">-</span>{{end}}</td>
                 <td><code>{{.ArtifactFile}}</code></td>
-                <td><span class="badge badge-{{.BuildStatus}}">{{.BuildStatus}}</span></td>
+                <td><span class="badge badge-{{.BuildStatus}}">{{statusText (printf "%s" .BuildStatus)}}</span></td>
             </tr>
             {{else}}
             <tr>
-                <td colspan="6" class="text-center">暂无组件快照</td>
+                <td colspan="7" class="text-center">暂无组件快照</td>
             </tr>
             {{end}}
         </tbody>

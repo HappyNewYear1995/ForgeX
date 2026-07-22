@@ -40,12 +40,13 @@ type ManifestJSON struct {
 }
 
 type ManifestComponent struct {
-	Name         string `json:"name"`
-	Version      string `json:"version"`
-	GitBranch    string `json:"git_branch"`
-	GitCommit    string `json:"git_commit"`
-	ArtifactFile string `json:"artifact_file"`
-	BuildStatus  string `json:"build_status"`
+	Name             string `json:"name"`
+	Version          string `json:"version"`
+	GitBranch        string `json:"git_branch"`
+	GitCommit        string `json:"git_commit"`
+	GitCommitMessage string `json:"git_commit_message"`
+	ArtifactFile     string `json:"artifact_file"`
+	BuildStatus      string `json:"build_status"`
 }
 
 // CreateRelease creates a new release with component snapshots
@@ -110,6 +111,11 @@ func (s *ReleaseService) CountReleases() (int64, error) {
 	return s.releaseStore.Count()
 }
 
+// DeleteRelease deletes a release and its associated component snapshots
+func (s *ReleaseService) DeleteRelease(id uint) error {
+	return s.releaseStore.Delete(id)
+}
+
 // UpdateReleaseStatus updates release status and generates manifest if completed
 func (s *ReleaseService) UpdateReleaseStatus(releaseID uint, status model.ReleaseStatus) error {
 	release, err := s.releaseStore.GetByID(releaseID)
@@ -140,7 +146,7 @@ func (s *ReleaseService) LinkBuild(releaseID, buildID uint) error {
 }
 
 // UpdateComponentSnapshot updates git commit info for a release component
-func (s *ReleaseService) UpdateComponentSnapshot(releaseID, componentID uint, gitCommit, buildStatus string) error {
+func (s *ReleaseService) UpdateComponentSnapshot(releaseID, componentID uint, gitCommit, gitCommitMessage, buildStatus string) error {
 	rcs, err := s.rcStore.ListByReleaseID(releaseID)
 	if err != nil {
 		return err
@@ -148,6 +154,7 @@ func (s *ReleaseService) UpdateComponentSnapshot(releaseID, componentID uint, gi
 	for _, rc := range rcs {
 		if rc.ComponentID == componentID {
 			rc.GitCommit = gitCommit
+			rc.GitCommitMessage = gitCommitMessage
 			rc.BuildStatus = buildStatus
 			return s.rcStore.Update(&rc)
 		}
@@ -165,12 +172,13 @@ func (s *ReleaseService) generateManifest(release *model.Release) *ManifestJSON 
 	components, _ := s.rcStore.ListByReleaseID(release.ID)
 	for _, rc := range components {
 		m.Components = append(m.Components, ManifestComponent{
-			Name:         rc.ComponentName,
-			Version:      rc.ComponentVersion,
-			GitBranch:    rc.GitBranch,
-			GitCommit:    rc.GitCommit,
-			ArtifactFile: rc.ArtifactFile,
-			BuildStatus:  rc.BuildStatus,
+			Name:             rc.ComponentName,
+			Version:          rc.ComponentVersion,
+			GitBranch:        rc.GitBranch,
+			GitCommit:        rc.GitCommit,
+			GitCommitMessage: rc.GitCommitMessage,
+			ArtifactFile:     rc.ArtifactFile,
+			BuildStatus:      rc.BuildStatus,
 		})
 	}
 	return m

@@ -3,6 +3,9 @@
 {{define "content"}}
 <div class="page-header">
     <h1>配置管理</h1>
+    <div class="page-header-actions">
+        <button type="button" class="btn btn-sm" id="toggleAllBtn" onclick="toggleAllCards()">全部缩起</button>
+    </div>
 </div>
 
 <div class="card" data-collapse-id="components">
@@ -13,13 +16,20 @@
     <div class="card-body">
 
     <!-- 新增根组件 -->
-    <form method="POST" action="/config/new" class="inline-form">
+    <button type="button" class="btn btn-sm" onclick="toggleAddForm('addCompForm')" style="margin-bottom:12px">＋ 添加组件</button>
+    <form method="POST" action="/config/new" class="inline-form add-form" id="addCompForm" style="display:none" data-ajax-form>
         <input type="hidden" name="parent_id" value="0">
         <input type="text" name="name" placeholder="组件名称" class="form-input" required>
         <input type="text" name="code" placeholder="编码 (如 acis-svr)" class="form-input" required>
+        <select name="type" class="form-input" style="width:100px">
+            <option value="backend">后端</option>
+            <option value="frontend">前端</option>
+            <option value="other">其他</option>
+        </select>
         <input type="text" name="description" placeholder="说明" class="form-input">
         <input type="number" name="sort_order" placeholder="排序" class="form-input" style="width:80px" value="0">
-        <button type="submit" class="btn btn-primary">添加组件</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+        <button type="button" class="btn" onclick="toggleAddForm('addCompForm')">取消</button>
     </form>
 
     <!-- 树形列表 -->
@@ -27,9 +37,10 @@
     <table class="table config-tree">
         <thead>
             <tr>
-                <th style="width:30%">名称</th>
-                <th style="width:18%">编码</th>
-                <th style="width:28%">说明</th>
+                <th style="width:28%">名称</th>
+                <th style="width:16%">编码</th>
+                <th style="width:10%">类型</th>
+                <th style="width:22%">说明</th>
                 <th style="width:8%">排序</th>
                 <th>操作</th>
             </tr>
@@ -43,22 +54,32 @@
                     <strong>{{.Name}}</strong>
                 </td>
                 <td><code>{{.Code}}</code></td>
+                <td>
+                    {{if eq (printf "%s" .Type) "frontend"}}<span class="badge badge-branch-dev">前端</span>
+                    {{else if eq (printf "%s" .Type) "other"}}<span class="badge badge-env-upgrade">其他</span>
+                    {{else}}<span class="badge badge-env-full">后端</span>{{end}}
+                </td>
                 <td>{{.Description}}</td>
                 <td>{{.SortOrder}}</td>
                 <td class="actions">
                     <button type="button" class="btn btn-sm btn-edit" onclick="toggleEdit(this)">编辑</button>
-                    <form method="POST" action="/config/{{.ID}}/delete" style="display:inline" data-confirm="确定删除组件「{{.Name}}」及其所有模块？">
+                    <form method="POST" action="/config/{{.ID}}/delete" style="display:inline" data-confirm="确定删除组件「{{.Name}}」及其所有模块？" data-ajax-form>
                         <button type="submit" class="btn btn-sm btn-danger">删除</button>
                     </form>
                 </td>
             </tr>
             <!-- 编辑行（隐藏） -->
             <tr class="tree-root row-edit" data-id="{{.ID}}" style="display:none">
-                <td colspan="5" class="cell-edit">
-                    <form method="POST" action="/config/{{.ID}}/edit" class="inline-form inline-form-compact">
+                <td colspan="6" class="cell-edit">
+                    <form method="POST" action="/config/{{.ID}}/edit" class="inline-form inline-form-compact" data-ajax-form>
                         <span class="tree-icon">📦</span>
                         <input type="text" name="name" class="form-input form-input-sm" value="{{.Name}}" required>
                         <input type="text" name="code" class="form-input form-input-sm" value="{{.Code}}" required>
+                        <select name="type" class="form-input form-input-sm" style="width:80px">
+                            <option value="backend" {{if eq (printf "%s" .Type) "backend"}}selected{{end}}>后端</option>
+                            <option value="frontend" {{if eq (printf "%s" .Type) "frontend"}}selected{{end}}>前端</option>
+                            <option value="other" {{if eq (printf "%s" .Type) "other"}}selected{{end}}>其他</option>
+                        </select>
                         <input type="text" name="description" class="form-input form-input-sm" value="{{.Description}}" placeholder="说明">
                         <input type="number" name="sort_order" class="form-input form-input-sm" style="width:60px" value="{{.SortOrder}}">
                         <button type="submit" class="btn btn-sm btn-primary">保存</button>
@@ -75,22 +96,32 @@
                     {{.Name}}
                 </td>
                 <td><code>{{.Code}}</code></td>
+                <td>
+                    {{if eq (printf "%s" .Type) "frontend"}}<span class="badge badge-branch-dev">前端</span>
+                    {{else if eq (printf "%s" .Type) "other"}}<span class="badge badge-env-upgrade">其他</span>
+                    {{else}}<span class="badge badge-env-full">后端</span>{{end}}
+                </td>
                 <td>{{.Description}}</td>
                 <td>{{.SortOrder}}</td>
                 <td class="actions">
                     <button type="button" class="btn btn-sm btn-edit" onclick="toggleEdit(this)">编辑</button>
-                    <form method="POST" action="/config/{{.ID}}/delete" style="display:inline" data-confirm="确定删除模块「{{.Name}}」？">
+                    <form method="POST" action="/config/{{.ID}}/delete" style="display:inline" data-confirm="确定删除模块「{{.Name}}」？" data-ajax-form>
                         <button type="submit" class="btn btn-sm btn-danger">删除</button>
                     </form>
                 </td>
             </tr>
             <tr class="tree-child row-edit" data-id="{{.ID}}" style="display:none">
-                <td colspan="5" class="cell-edit">
-                    <form method="POST" action="/config/{{.ID}}/edit" class="inline-form inline-form-compact">
+                <td colspan="6" class="cell-edit">
+                    <form method="POST" action="/config/{{.ID}}/edit" class="inline-form inline-form-compact" data-ajax-form>
                         <span class="tree-indent"></span>
                         <span class="tree-icon">📄</span>
                         <input type="text" name="name" class="form-input form-input-sm" value="{{.Name}}" required>
                         <input type="text" name="code" class="form-input form-input-sm" value="{{.Code}}" required>
+                        <select name="type" class="form-input form-input-sm" style="width:80px">
+                            <option value="backend" {{if eq (printf "%s" .Type) "backend"}}selected{{end}}>后端</option>
+                            <option value="frontend" {{if eq (printf "%s" .Type) "frontend"}}selected{{end}}>前端</option>
+                            <option value="other" {{if eq (printf "%s" .Type) "other"}}selected{{end}}>其他</option>
+                        </select>
                         <input type="text" name="description" class="form-input form-input-sm" value="{{.Description}}" placeholder="说明">
                         <input type="number" name="sort_order" class="form-input form-input-sm" style="width:60px" value="{{.SortOrder}}">
                         <button type="submit" class="btn btn-sm btn-primary">保存</button>
@@ -102,15 +133,22 @@
             {{end}}
             <!-- 新增子模块 -->
             <tr class="tree-add">
-                <td colspan="5">
-                    <form method="POST" action="/config/new" class="inline-form inline-form-compact">
+                <td colspan="6">
+                    <button type="button" class="btn btn-sm" onclick="toggleAddForm('addModForm_{{.ID}}')" style="margin:4px 0">＋ 添加模块</button>
+                    <form method="POST" action="/config/new" class="inline-form inline-form-compact add-form" id="addModForm_{{.ID}}" style="display:none" data-ajax-form>
                         <input type="hidden" name="parent_id" value="{{.ID}}">
                         <span class="tree-indent"></span>
                         <input type="text" name="name" placeholder="模块名称" class="form-input form-input-sm" required>
                         <input type="text" name="code" placeholder="编码" class="form-input form-input-sm" required>
+                        <select name="type" class="form-input form-input-sm" style="width:80px">
+                            <option value="backend">后端</option>
+                            <option value="frontend">前端</option>
+                            <option value="other">其他</option>
+                        </select>
                         <input type="text" name="description" placeholder="说明" class="form-input form-input-sm">
                         <input type="number" name="sort_order" placeholder="排序" class="form-input form-input-sm" style="width:60px" value="0">
-                        <button type="submit" class="btn btn-sm btn-primary">添加模块</button>
+                        <button type="submit" class="btn btn-sm btn-primary">保存</button>
+                        <button type="button" class="btn btn-sm" onclick="toggleAddForm('addModForm_{{.ID}}')">取消</button>
                     </form>
                 </td>
             </tr>
@@ -136,7 +174,7 @@
         <span class="api-status{{if eq .TestStatus "ok"}} api-ok{{else if eq .TestStatus "err"}} api-err{{end}}">{{if eq .TestStatus "ok"}}✓ 连接正常{{else if eq .TestStatus "err"}}✗ 连接异常{{end}}</span>
         {{if .TestTime}}<span class="sys-test-time">最近测试: {{.TestTime}}</span>{{end}}
     </div>
-    <form method="POST" action="/config/sys/{{.Category}}" class="sys-config-form" data-category="{{.Category}}">
+    <form method="POST" action="/config/sys/{{.Category}}" class="sys-config-form" data-category="{{.Category}}" data-ajax-form>
         {{range .Fields}}
         <div class="form-group">
             <label>{{.Label}}</label>
@@ -165,10 +203,12 @@
     <div class="card-body">
 
     <!-- 新增测试环境 -->
-    <form method="POST" action="/config/testenv/new" class="inline-form inline-form-nowrap">
+    <button type="button" class="btn btn-sm" onclick="toggleAddForm('addTestEnvForm')" style="margin-bottom:12px">＋ 添加测试环境</button>
+    <form method="POST" action="/config/testenv/new" class="inline-form inline-form-nowrap add-form" id="addTestEnvForm" style="display:none" data-ajax-form>
         <input type="text" name="name" placeholder="环境名称" class="form-input" required>
         <input type="url" name="url" placeholder="http(s)://地址" class="form-input" style="min-width:280px" required>
-        <button type="submit" class="btn btn-primary">添加</button>
+        <button type="submit" class="btn btn-primary">保存</button>
+        <button type="button" class="btn" onclick="toggleAddForm('addTestEnvForm')">取消</button>
     </form>
 
     {{if .TestEnvs}}
@@ -192,7 +232,7 @@
                 </td>
                 <td class="actions">
                     <button type="button" class="btn btn-sm btn-edit" onclick="toggleEdit(this)">编辑</button>
-                    <form method="POST" action="/config/testenv/{{.ID}}/delete" style="display:inline" data-confirm="确定删除测试环境「{{.Name}}」？">
+                    <form method="POST" action="/config/testenv/{{.ID}}/delete" style="display:inline" data-confirm="确定删除测试环境「{{.Name}}」？" data-ajax-form>
                         <button type="submit" class="btn btn-sm btn-danger">删除</button>
                     </form>
                 </td>
@@ -200,7 +240,7 @@
             <!-- 编辑行（隐藏） -->
             <tr class="row-edit" data-id="{{.ID}}" style="display:none">
                 <td colspan="4" class="cell-edit">
-                    <form method="POST" action="/config/testenv/{{.ID}}/edit" class="inline-form inline-form-compact inline-form-nowrap">
+                    <form method="POST" action="/config/testenv/{{.ID}}/edit" class="inline-form inline-form-compact inline-form-nowrap" data-ajax-form>
                         <input type="text" name="name" class="form-input form-input-sm" value="{{.Name}}" required>
                         <input type="url" name="url" class="form-input form-input-sm" value="{{.URL}}" style="min-width:280px" required>
                         <button type="submit" class="btn btn-sm btn-primary">保存</button>
@@ -237,9 +277,12 @@
         </div>
         <div class="script-modal-body">
             <div id="smPreview" class="script-preview">
-                <pre class="script-preview-code" id="smPreviewCode">暂无脚本内容</pre>
+                <pre class="script-preview-code language-javascript" id="smPreviewCode">暂无脚本内容</pre>
             </div>
             <div id="smEditor" class="script-editor" style="display:none">
+                <div class="script-editor-toolbar" style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+                    <button type="button" class="btn btn-sm" onclick="insertFileOp()" title="插入文件上传操作">📎 插入文件</button>
+                </div>
                 <textarea id="smTextarea" class="script-textarea" rows="16" spellcheck="false"></textarea>
                 <div class="script-editor-actions">
                     <button type="button" class="btn btn-sm btn-primary" onclick="saveScript()">保存</button>

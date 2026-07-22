@@ -30,6 +30,12 @@ func (s *ConfigItemStore) GetByID(id uint) (*model.ConfigItem, error) {
 	return &item, err
 }
 
+func (s *ConfigItemStore) GetByName(name string) (*model.ConfigItem, error) {
+	var item model.ConfigItem
+	err := DB.Where("name = ?", name).First(&item).Error
+	return &item, err
+}
+
 func (s *ConfigItemStore) Create(item *model.ConfigItem) error {
 	return DB.Create(item).Error
 }

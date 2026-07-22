@@ -69,13 +69,17 @@ func (h *BuildHandler) Trigger(w http.ResponseWriter, r *http.Request) {
 		RequestHost:    r.Host,
 	}
 
-	_, err := h.buildService.Trigger(params)
+	builds, err := h.buildService.Trigger(params)
 	if err != nil {
 		log.Printf("[build] trigger error: %v", err)
 		http.Error(w, "触发构建失败: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("[build] triggered product=%d version=%s by=%s", productID, productVersion, params.TriggeredBy)
+	if len(builds) > 1 {
+		log.Printf("[build] triggered %d component builds for product=%d version=%s by=%s", len(builds), productID, productVersion, params.TriggeredBy)
+	} else {
+		log.Printf("[build] triggered product=%d version=%s by=%s", productID, productVersion, params.TriggeredBy)
+	}
 	http.Redirect(w, r, "/products", http.StatusSeeOther)
 }
 
@@ -146,4 +150,26 @@ func (h *BuildHandler) Artifacts(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(artifacts)
+}
+
+// Delete deletes a build record and redirects back to the product detail page
+func (h *BuildHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	buildID, _ := strconv.Atoi(r.PathValue("buildId"))
+	if buildID == 0 {
+		http.Error(w, "invalid build id", http.StatusBadRequest)
+		return
+	}
+	build, err := h.buildService.GetByID(uint(buildID))
+	if err != nil {
+		http.Error(w, "build not found", http.StatusNotFound)
+		return
+	}
+	productID := build.ProductID
+	if err := h.buildService.DeleteBuild(uint(buildID)); err != nil {
+		log.Printf("[build] delete error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("[build] deleted build#%d", buildID)
+	http.Redirect(w, r, "/products/"+strconv.Itoa(int(productID)), http.StatusSeeOther)
 }

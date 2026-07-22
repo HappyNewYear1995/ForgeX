@@ -39,6 +39,14 @@ func (s *ReleaseStore) Update(r *model.Release) error {
 	return DB.Save(r).Error
 }
 
+func (s *ReleaseStore) Delete(id uint) error {
+	// Delete associated release components first
+	DB.Where("release_id = ?", id).Delete(&model.ReleaseComponent{})
+	// Unlink build if associated
+	DB.Model(&model.Build{}).Where("release_id = ?", id).Update("release_id", 0)
+	return DB.Delete(&model.Release{}, id).Error
+}
+
 func (s *ReleaseStore) Count() (int64, error) {
 	var count int64
 	err := DB.Model(&model.Release{}).Count(&count).Error

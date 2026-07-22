@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"encoding/json"
 	"html/template"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -58,6 +60,7 @@ func (h *ProductHandler) CreateForm(w http.ResponseWriter, r *http.Request) {
 		"SelectedComps":  map[uint]*model.Component{},
 		"TestEnvs":       testEnvs,
 		"SelectedEnvIDs": map[uint]bool{},
+		"JenkinsJobMode": "project",
 	}
 	_ = h.tmpl["product_form"].ExecuteTemplate(w, "layout", data)
 }
@@ -104,6 +107,7 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	product, err := h.productService.CreateProductWithEnv(
 		r.FormValue("name"),
+		r.FormValue("code"),
 		r.FormValue("description"),
 		version,
 		testEnvEnabled,
@@ -113,6 +117,17 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Save Jenkins job binding
+	jenkinsJobMode := r.FormValue("jenkins_job_mode")
+	if jenkinsJobMode == "" {
+		jenkinsJobMode = "project"
+	}
+	jenkinsJobName := ""
+	if jenkinsJobMode == "project" {
+		jenkinsJobName = r.FormValue("jenkins_job_name")
+	}
+	_ = h.productService.UpdateProductJenkinsJob(product.ID, jenkinsJobName, jenkinsJobMode)
 
 	// Save test env associations
 	if testEnvEnabled {
@@ -131,6 +146,7 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	for _, idStr := range compIDs {
 		gitURL := r.FormValue("comp_git_url_" + idStr)
 		branchFilter := r.FormValue("comp_branch_filter_" + idStr)
+		jenkinsJob := r.FormValue("comp_jenkins_job_" + idStr)
 
 		// Look up config item to get name/code
 		compID, _ := strconv.Atoi(idStr)
@@ -143,9 +159,9 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 		_, err = h.productService.AddComponent(
 			product.ID,
 			configItem.Name,
-			model.ComponentTypeBackend,
+			configItem.Type,
 			gitURL,
-			"",
+			jenkinsJob,
 			"0.0.0.0",
 		)
 		if err != nil {
@@ -196,6 +212,11 @@ func (h *ProductHandler) EditForm(w http.ResponseWriter, r *http.Request) {
 		selectedEnvIDs[eid] = true
 	}
 
+	jenkinsJobMode := product.JenkinsJobMode
+	if jenkinsJobMode == "" {
+		jenkinsJobMode = "project"
+	}
+
 	data := map[string]interface{}{
 		"Title":          "编辑项目",
 		"Username":       middleware.GetUsername(r),
@@ -204,6 +225,7 @@ func (h *ProductHandler) EditForm(w http.ResponseWriter, r *http.Request) {
 		"SelectedComps":  selectedComps,
 		"TestEnvs":       testEnvs,
 		"SelectedEnvIDs": selectedEnvIDs,
+		"JenkinsJobMode": jenkinsJobMode,
 	}
 	_ = h.tmpl["product_form"].ExecuteTemplate(w, "layout", data)
 }
@@ -252,6 +274,7 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	err := h.productService.UpdateProductWithEnv(
 		uint(id),
 		r.FormValue("name"),
+		r.FormValue("code"),
 		r.FormValue("description"),
 		version,
 		testEnvEnabled,
@@ -261,6 +284,17 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Save Jenkins job binding
+	jenkinsJobMode := r.FormValue("jenkins_job_mode")
+	if jenkinsJobMode == "" {
+		jenkinsJobMode = "project"
+	}
+	jenkinsJobName := ""
+	if jenkinsJobMode == "project" {
+		jenkinsJobName = r.FormValue("jenkins_job_name")
+	}
+	_ = h.productService.UpdateProductJenkinsJob(uint(id), jenkinsJobName, jenkinsJobMode)
 
 	// Save test env associations
 	var envIDs []uint
@@ -287,6 +321,7 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	for _, idStr := range compIDs {
 		gitURL := r.FormValue("comp_git_url_" + idStr)
 		branchFilter := r.FormValue("comp_branch_filter_" + idStr)
+		jenkinsJob := r.FormValue("comp_jenkins_job_" + idStr)
 
 		compID, _ := strconv.Atoi(idStr)
 		configItem, err := h.configService.GetByID(uint(compID))
@@ -299,16 +334,16 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 		if existing, ok := existingMap[configItem.Name]; ok {
 			// Update existing component
 			existing.GitURL = gitURL
-			_ = h.productService.UpdateComponent(existing.ID, existing.Name, existing.Type, gitURL, existing.JenkinsJobName, existing.CurrentVersion)
+			_ = h.productService.UpdateComponent(existing.ID, existing.Name, existing.Type, gitURL, jenkinsJob, existing.CurrentVersion)
 			_ = h.productService.UpdateComponentBranchFilter(existing.ID, branchFilter)
 		} else {
 			// Add new component
 			comp, err := h.productService.AddComponent(
 				uint(id),
 				configItem.Name,
-				model.ComponentTypeBackend,
+				configItem.Type,
 				gitURL,
-				"",
+				jenkinsJob,
 				"0.0.0.0",
 			)
 			if err != nil {
@@ -364,16 +399,90 @@ func (h *ProductHandler) Detail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Build release download availability map: releaseID -> {"upgrade": true/false, "full": true/false}
+	releaseBuilds := make(map[uint]map[string]bool)
+	for _, b := range builds {
+		if b.ReleaseID > 0 && b.Status == model.BuildStatusSuccess {
+			if _, ok := releaseBuilds[b.ReleaseID]; !ok {
+				releaseBuilds[b.ReleaseID] = make(map[string]bool)
+			}
+			releaseBuilds[b.ReleaseID][b.BuildEnv] = true
+		}
+	}
+
+	// Build component names map for each build (from ParametersJSON)
+	buildComponents := make(map[uint][]string)
+	for _, b := range builds {
+		buildComponents[b.ID] = parseBuildComponents(b.ParametersJSON)
+	}
+
+	// Build release script status map: releaseID -> aggregated ScriptRunStatus
+	releaseScriptStatus := make(map[uint]string)
+	// Build release script output map: releaseID -> ScriptRunOutput (for log viewing)
+	releaseScriptOutput := make(map[uint]string)
+	for _, b := range builds {
+		if b.ReleaseID > 0 && b.ScriptRunStatus != "" {
+			existing := releaseScriptStatus[b.ReleaseID]
+			// Priority: running > failed > success
+			if existing == "" || b.ScriptRunStatus == "running" || (existing == "success" && b.ScriptRunStatus == "failed") {
+				releaseScriptStatus[b.ReleaseID] = b.ScriptRunStatus
+				releaseScriptOutput[b.ReleaseID] = b.ScriptRunOutput
+			}
+		}
+	}
+
+	// Filter releases: only show released (completed) ones
+	var visibleReleases []model.Release
+	for _, r := range releases {
+		if r.Status == model.ReleaseStatusReleased {
+			visibleReleases = append(visibleReleases, r)
+		}
+	}
+
+	// Sort releases by version descending (highest version first)
+	sort.Slice(visibleReleases, func(i, j int) bool {
+		return compareVersions(visibleReleases[i].Version, visibleReleases[j].Version) > 0
+	})
+
 	data := map[string]interface{}{
-		"Title":          product.Name,
-		"Username":       middleware.GetUsername(r),
-		"Product":        product,
-		"Components":     components,
-		"Builds":         builds,
-		"Releases":       releases,
-		"LinkedTestEnvs": linkedTestEnvs,
+		"Title":               product.Name,
+		"Username":            middleware.GetUsername(r),
+		"Product":             product,
+		"Components":          components,
+		"Builds":              builds,
+		"Releases":            visibleReleases,
+		"LinkedTestEnvs":      linkedTestEnvs,
+		"ReleaseBuilds":       releaseBuilds,
+		"BuildComponents":     buildComponents,
+		"ReleaseScriptStatus": releaseScriptStatus,
+		"ReleaseScriptOutput": releaseScriptOutput,
 	}
 	_ = h.tmpl["product_detail"].ExecuteTemplate(w, "layout", data)
+}
+
+// parseBuildComponents extracts component names from a build's ParametersJSON.
+// Independent mode: returns [COMPONENT_NAME]
+// Unified mode: returns all {code} values from {code}_COMPONENT keys
+func parseBuildComponents(paramsJSON string) []string {
+	if paramsJSON == "" {
+		return nil
+	}
+	var params map[string]string
+	if err := json.Unmarshal([]byte(paramsJSON), &params); err != nil {
+		return nil
+	}
+	// Independent mode: COMPONENT_NAME
+	if name, ok := params["COMPONENT_NAME"]; ok && name != "" {
+		return []string{name}
+	}
+	// Unified mode: extract from {code}_COMPONENT keys
+	var names []string
+	for k, v := range params {
+		if strings.HasSuffix(k, "_COMPONENT") && v != "" {
+			names = append(names, v)
+		}
+	}
+	return names
 }
 
 func (h *ProductHandler) AddComponent(w http.ResponseWriter, r *http.Request) {
@@ -410,4 +519,28 @@ func (h *ProductHandler) DeleteComponent(w http.ResponseWriter, r *http.Request)
 		log.Printf("[component] delete error: %v", err)
 	}
 	http.Redirect(w, r, "/products/"+projectID, http.StatusSeeOther)
+}
+
+// compareVersions compares two version strings (e.g. "3.0.0.1" vs "3.0.0.2").
+// Returns >0 if a>b, <0 if a<b, 0 if equal.
+func compareVersions(a, b string) int {
+	partsA := strings.Split(a, ".")
+	partsB := strings.Split(b, ".")
+	maxLen := len(partsA)
+	if len(partsB) > maxLen {
+		maxLen = len(partsB)
+	}
+	for i := 0; i < maxLen; i++ {
+		var numA, numB int
+		if i < len(partsA) {
+			numA, _ = strconv.Atoi(partsA[i])
+		}
+		if i < len(partsB) {
+			numB, _ = strconv.Atoi(partsB[i])
+		}
+		if numA != numB {
+			return numA - numB
+		}
+	}
+	return 0
 }

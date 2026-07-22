@@ -27,15 +27,13 @@
                 <td>{{.ID}}</td>
                 <td><code>{{.ProductVersion}}</code></td>
                 <td><span class="badge badge-env-{{.BuildEnv}}">{{.BuildEnv}}</span></td>
-                <td><span class="badge badge-{{.Status}}">{{.Status}}</span></td>
+                <td><span class="badge badge-{{.Status}}">{{statusText (printf "%s" .Status)}}</span></td>
                 <td>{{.JenkinsBuildNumber}}</td>
                 <td>{{.TriggeredBy}}</td>
                 <td>{{if .StartedAt}}{{.StartedAt.Format "15:04:05"}}{{else}}-{{end}}</td>
                 <td>{{if .FinishedAt}}{{.FinishedAt.Format "15:04:05"}}{{else}}-{{end}}</td>
                 <td>
-                    {{if .LogURL}}
-                    <a href="/builds/{{.ID}}/log" target="_blank" class="btn btn-sm">查看日志</a>
-                    {{end}}
+                    <button class="btn btn-sm" onclick="showBuildLog({{.ID}})">查看日志</button>
                 </td>
             </tr>
             {{else}}

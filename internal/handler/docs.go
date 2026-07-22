@@ -131,6 +131,211 @@ func (h *DocsHandler) Page(w http.ResponseWriter, r *http.Request) {
 <li>构建完成后可手动点击「执行」运行脚本，或勾选「自动同步测试环境」自动执行</li>
 </ol>`),
 		},
+		{
+			Title: "Jenkinsfile 示例",
+			Date:  "2026-07-20",
+			Content: template.HTML(`<h3>概述</h3>
+<p>根据项目的 Jenkins 任务绑定模式，Jenkinsfile 分为两种：</p>
+<ul>
+<li><strong>统一任务模式</strong>：整个项目共用一个 Jenkins Pipeline，参数为各组件的 <code>{组件code}_REPO_URL</code>、<code>{组件code}_BRANCH</code>、<code>{组件code}_CALLBACK_URL</code>、<code>{组件code}_COMPONENT</code>、<code>{组件code}_MODULE_LIST</code></li>
+<li><strong>独立任务模式</strong>：每个组件独立绑定 Jenkins Pipeline，参数为标准 <code>REPO_URL</code>、<code>BRANCH</code>、<code>CALLBACK_URL</code>、<code>COMPONENT</code>、<code>MODULE_LIST</code></li>
+</ul>
+
+<h3>统一任务模式 Jenkinsfile 示例</h3>
+<p>适用于整个项目绑定一个 Jenkins 任务的场景。系统会为每个参与的组件传递 <code>{组件code}_REPO_URL</code>、<code>{组件code}_BRANCH</code>、<code>{组件code}_CALLBACK_URL</code>、<code>{组件code}_COMPONENT</code>、<code>{组件code}_MODULE_LIST</code> 参数。</p>
+<pre><code>pipeline {
+    agent any
+
+    parameters {
+        // 组件 acis-svr 的参数
+        string(name: 'acis-svr_REPO_URL', defaultValue: '', description: 'acis-svr 仓库地址')
+        string(name: 'acis-svr_BRANCH', defaultValue: 'main', description: 'acis-svr 分支')
+        string(name: 'acis-svr_CALLBACK_URL', defaultValue: '', description: 'acis-svr 回调地址')
+        string(name: 'acis-svr_COMPONENT', defaultValue: '', description: 'acis-svr 组件编码')
+        string(name: 'acis-svr_MODULE_LIST', defaultValue: '', description: 'acis-svr 模块列表，逗号分隔')
+
+        // 组件 acis-web 的参数
+        string(name: 'acis-web_REPO_URL', defaultValue: '', description: 'acis-web 仓库地址')
+        string(name: 'acis-web_BRANCH', defaultValue: 'main', description: 'acis-web 分支')
+        string(name: 'acis-web_CALLBACK_URL', defaultValue: '', description: 'acis-web 回调地址')
+        string(name: 'acis-web_COMPONENT', defaultValue: '', description: 'acis-web 组件编码')
+        string(name: 'acis-web_MODULE_LIST', defaultValue: '', description: 'acis-web 模块列表，逗号分隔')
+
+        // 公共参数
+        string(name: 'CALLBACK_TOKEN', defaultValue: '', description: '回调Token')
+    }
+
+    environment {
+        VERSION_GIT_CREDENTIALS_ID = 'git-credentials-id'
+        GIT_CREDENTIALS_ID         = 'git-credentials-id'
+        NEXUS_REPO                 = 'nexus-repo-url'
+    }
+
+    tools {
+        maven 'apache-maven-3.9.6'
+        jdk   'jdk8'
+    }
+
+    stages {
+        stage('构建 acis-svr') {
+            when { expression { params['acis-svr_REPO_URL'] != '' } }
+            steps {
+                script {
+                    def repoUrl  = params['acis-svr_REPO_URL']
+                    def branch   = params['acis-svr_BRANCH']
+                    def callback = params['acis-svr_CALLBACK_URL']
+
+                    checkout([$class: 'GitSCM',
+                        branches: [[name: branch]],
+                        userRemoteConfigs: [[url: repoUrl, credentialsId: env.GIT_CREDENTIALS_ID]]
+                    ])
+
+                    sh 'mvn clean package -DskipTests'
+
+                    // 回调上传制品
+                    sh """
+                        curl -X POST \\n                            -H 'Content-Type: application/json' \\n                            -d '{"status":"SUCCESS","downloadUrl":"'${env.BUILD_URL}'artifact/target/app.jar","artifactName":"app.jar","branch":"'${branch}'"}' \\n                            ${callback}
+                    """
+                }
+            }
+        }
+
+        stage('构建 acis-web') {
+            when { expression { params['acis-web_REPO_URL'] != '' } }
+            steps {
+                script {
+                    def repoUrl  = params['acis-web_REPO_URL']
+                    def branch   = params['acis-web_BRANCH']
+                    def callback = params['acis-web_CALLBACK_URL']
+
+                    checkout([$class: 'GitSCM',
+                        branches: [[name: branch]],
+                        userRemoteConfigs: [[url: repoUrl, credentialsId: env.GIT_CREDENTIALS_ID]]
+                    ])
+
+                    tool name: 'node_18_16_1', type: 'jenkins.plugins.nodejs.tools.NodeJSInstallation'
+                    sh 'npm install &amp;&amp; npm run build'
+
+                    // 回调上传制品
+                    sh """
+                        curl -X POST \\n                            -H 'Content-Type: application/json' \\n                            -d '{"status":"SUCCESS","downloadUrl":"'${env.BUILD_URL}'artifact/dist/app.zip","artifactName":"app.zip","branch":"'${branch}'"}' \\n                            ${callback}
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo '构建失败，回调通知系统'
+            // 回调失败状态
+            script {
+                def failedCallback = params['acis-svr_CALLBACK_URL'] ?: params['acis-web_CALLBACK_URL']
+                if (failedCallback) {
+                    sh """
+                        curl -X POST \\n                            -H 'Content-Type: application/json' \\n                            -d '{"status":"FAILURE","errorMessage":"Jenkins 构建失败"}' \\n                            ${failedCallback}
+                    """
+                }
+            }
+        }
+    }
+}</code></pre>
+
+<h3>独立任务模式 Jenkinsfile 示例</h3>
+<p>适用于每个组件独立绑定 Jenkins 任务的场景。系统为每个组件传递标准的 <code>REPO_URL</code>、<code>BRANCH</code>、<code>CALLBACK_URL</code>、<code>COMPONENT</code>、<code>MODULE_LIST</code> 参数。</p>
+<pre><code>pipeline {
+    agent any
+
+    parameters {
+        string(name: 'REPO_URL',       defaultValue: '', description: '组件仓库地址')
+        string(name: 'BRANCH',         defaultValue: 'main', description: '构建分支')
+        string(name: 'CALLBACK_URL',   defaultValue: '', description: '回调地址')
+        string(name: 'CALLBACK_TOKEN', defaultValue: '', description: '回调Token')
+        string(name: 'COMPONENT',      defaultValue: '', description: '组件编码')
+        string(name: 'MODULE_LIST',    defaultValue: '', description: '模块列表，逗号分隔')
+    }
+
+    environment {
+        VERSION_GIT_CREDENTIALS_ID = 'git-credentials-id'
+        GIT_CREDENTIALS_ID         = 'git-credentials-id'
+        NEXUS_REPO                 = 'nexus-repo-url'
+    }
+
+    tools {
+        maven 'apache-maven-3.9.6'
+        jdk   'jdk8'
+    }
+
+    stages {
+        stage('拉取代码') {
+            steps {
+                checkout([$class: 'GitSCM',
+                    branches: [[name: params.BRANCH]],
+                    userRemoteConfigs: [[url: params.REPO_URL, credentialsId: env.GIT_CREDENTIALS_ID]]
+                ])
+            }
+        }
+
+        stage('构建') {
+            steps {
+                sh 'mvn clean package -DskipTests'
+            }
+        }
+
+        stage('回调制品') {
+            steps {
+                script {
+                    def artifactPath = 'target/app.jar'
+                    def artifactName = 'app.jar'
+                    def downloadUrl  = "${env.BUILD_URL}artifact/${artifactPath}"
+
+                    sh """
+                        curl -X POST \\n                            -H 'Content-Type: application/json' \\n                            -d '{
+                                "status": "SUCCESS",
+                                "downloadUrl": "${downloadUrl}",
+                                "artifactName": "${artifactName}",
+                                "branch": "${params.BRANCH}",
+                                "buildNumber": ${env.BUILD_NUMBER}
+                            }' \\n                            ${params.CALLBACK_URL}
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo '构建失败，回调通知系统'
+            script {
+                if (params.CALLBACK_URL) {
+                    sh """
+                        curl -X POST \\n                            -H 'Content-Type: application/json' \\n                            -d '{
+                                "status": "FAILURE",
+                                "errorMessage": "Jenkins 构建失败",
+                                "buildNumber": ${env.BUILD_NUMBER}
+                            }' \\n                            ${params.CALLBACK_URL}
+                    """
+                }
+            }
+        }
+    }
+}</code></pre>
+
+<h3>回调接口说明</h3>
+<p>Jenkins 构建完成后需通过 HTTP POST 回调系统接口，地址格式为：</p>
+<pre><code>POST {CALLBACK_URL}</code></pre>
+<p>请求体（JSON）：</p>
+<table class="table">
+<tr><th>字段</th><th>类型</th><th>说明</th></tr>
+<tr><td><code>status</code></td><td>string</td><td><code>SUCCESS</code> 或 <code>FAILURE</code></td></tr>
+<tr><td><code>downloadUrl</code></td><td>string</td><td>制品下载地址（成功时必填）</td></tr>
+<tr><td><code>artifactName</code></td><td>string</td><td>制品文件名</td></tr>
+<tr><td><code>branch</code></td><td>string</td><td>构建分支</td></tr>
+<tr><td><code>buildNumber</code></td><td>int</td><td>Jenkins 构建号</td></tr>
+<tr><td><code>errorMessage</code></td><td>string</td><td>错误信息（失败时填写）</td></tr>
+</table>
+<p>系统收到成功回调后会自动下载制品，待所有组件回调完成后打包为最终升级包/整包，并触发 Playwright 测试脚本。</p>`),
+		},
 	}
 
 	data := map[string]interface{}{

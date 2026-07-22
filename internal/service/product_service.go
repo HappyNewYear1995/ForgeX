@@ -33,12 +33,14 @@ func (s *ProductService) CreateProduct(name, description, currentVersion string)
 	return p, nil
 }
 
-func (s *ProductService) CreateProductWithEnv(name, description, currentVersion string, testEnvEnabled bool) (*model.Product, error) {
+func (s *ProductService) CreateProductWithEnv(name, code, description, currentVersion string, testEnvEnabled bool) (*model.Product, error) {
 	p := &model.Product{
 		Name:           name,
+		Code:           code,
 		Description:    description,
 		CurrentVersion: currentVersion,
 		TestEnvEnabled: testEnvEnabled,
+		JenkinsJobMode: "project",
 	}
 	if err := s.productStore.Create(p); err != nil {
 		return nil, err
@@ -65,15 +67,26 @@ func (s *ProductService) UpdateProduct(id uint, name, description, currentVersio
 	return s.productStore.Update(p)
 }
 
-func (s *ProductService) UpdateProductWithEnv(id uint, name, description, currentVersion string, testEnvEnabled bool) error {
+func (s *ProductService) UpdateProductWithEnv(id uint, name, code, description, currentVersion string, testEnvEnabled bool) error {
 	p, err := s.productStore.GetByID(id)
 	if err != nil {
 		return err
 	}
 	p.Name = name
+	p.Code = code
 	p.Description = description
 	p.CurrentVersion = currentVersion
 	p.TestEnvEnabled = testEnvEnabled
+	return s.productStore.Update(p)
+}
+
+func (s *ProductService) UpdateProductJenkinsJob(id uint, jobName, jobMode string) error {
+	p, err := s.productStore.GetByID(id)
+	if err != nil {
+		return err
+	}
+	p.JenkinsJobName = jobName
+	p.JenkinsJobMode = jobMode
 	return s.productStore.Update(p)
 }
 

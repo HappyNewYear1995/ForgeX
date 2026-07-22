@@ -40,8 +40,23 @@ func (s *BuildStore) ListRecent(limit int) ([]model.Build, error) {
 	return builds, err
 }
 
+func (s *BuildStore) ListByReleaseID(releaseID uint) ([]model.Build, error) {
+	var builds []model.Build
+	err := DB.Preload("Release").
+		Where("release_id = ?", releaseID).
+		Order("created_at desc").
+		Find(&builds).Error
+	return builds, err
+}
+
 func (s *BuildStore) Update(b *model.Build) error {
 	return DB.Save(b).Error
+}
+
+func (s *BuildStore) Delete(id uint) error {
+	// Delete associated artifacts first
+	DB.Where("build_id = ?", id).Delete(&model.Artifact{})
+	return DB.Delete(&model.Build{}, id).Error
 }
 
 func (s *BuildStore) ListPending() ([]model.Build, error) {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -85,6 +86,19 @@ func (h *ConfigHandler) TreeJSON(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(tree)
 }
 
+// JenkinsJobs returns the list of Jenkins job names as JSON.
+func (h *ConfigHandler) JenkinsJobs(w http.ResponseWriter, r *http.Request) {
+	jobs, err := h.jenkinsService.ListJobs()
+	if err != nil {
+		log.Printf("[jenkins] list jobs error: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error(), "jobs": []string{}})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"jobs": jobs})
+}
+
 func (h *ConfigHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
@@ -92,19 +106,25 @@ func (h *ConfigHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	parentID, _ := strconv.Atoi(r.FormValue("parent_id"))
 	sortOrder, _ := strconv.Atoi(r.FormValue("sort_order"))
+	compType := r.FormValue("type")
 	_, err := h.configService.Create(
 		r.FormValue("name"),
 		r.FormValue("code"),
 		r.FormValue("description"),
 		uint(parentID),
 		sortOrder,
+		compType,
 	)
 	if err != nil {
 		log.Printf("[config] create error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/config", http.StatusSeeOther)
+	anchor := "components"
+	if parentID > 0 {
+		anchor = "components"
+	}
+	http.Redirect(w, r, "/config#"+anchor, http.StatusSeeOther)
 }
 
 func (h *ConfigHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -114,19 +134,21 @@ func (h *ConfigHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sortOrder, _ := strconv.Atoi(r.FormValue("sort_order"))
+	compType := r.FormValue("type")
 	err := h.configService.Update(
 		uint(id),
 		r.FormValue("name"),
 		r.FormValue("code"),
 		r.FormValue("description"),
 		sortOrder,
+		compType,
 	)
 	if err != nil {
 		log.Printf("[config] update error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/config", http.StatusSeeOther)
+	http.Redirect(w, r, "/config#components", http.StatusSeeOther)
 }
 
 func (h *ConfigHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -134,7 +156,7 @@ func (h *ConfigHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.configService.Delete(uint(id)); err != nil {
 		log.Printf("[config] delete error: %v", err)
 	}
-	http.Redirect(w, r, "/config", http.StatusSeeOther)
+	http.Redirect(w, r, "/config#components", http.StatusSeeOther)
 }
 
 // SaveSysConfig saves system configuration for a given category.
@@ -153,13 +175,20 @@ func (h *ConfigHandler) SaveSysConfig(w http.ResponseWriter, r *http.Request) {
 		pairs[key] = values[0]
 	}
 
+	// Strip trailing slash from URL values
+	for key, val := range pairs {
+		if key == "url" {
+			pairs[key] = strings.TrimRight(val, "/")
+		}
+	}
+
 	if err := h.configService.SaveSysConfig(category, pairs); err != nil {
 		log.Printf("[config] save sys config error: %v", err)
 		http.Error(w, "保存失败: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	log.Printf("[config] saved sys config category=%s", category)
-	http.Redirect(w, r, "/config?saved="+category, http.StatusSeeOther)
+	http.Redirect(w, r, "/config?saved="+category+"#sys_"+category, http.StatusSeeOther)
 }
 
 // TestAPI tests connectivity for a given system config category (jenkins or gitea).
@@ -199,6 +228,7 @@ func (h *ConfigHandler) testGiteaConnection() error {
 	if giteaURL == "" {
 		return fmt.Errorf("Gitea 地址未配置")
 	}
+	giteaURL = strings.TrimRight(giteaURL, "/")
 
 	apiURL := giteaURL + "/api/v1/user"
 	req, err := http.NewRequest("GET", apiURL, nil)
@@ -234,11 +264,12 @@ func (h *ConfigHandler) GiteaRepos(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Gitea 未配置", http.StatusBadRequest)
 		return
 	}
+	giteaURL = strings.TrimRight(giteaURL, "/")
 
 	q := r.URL.Query().Get("q")
 	apiURL := giteaURL + "/api/v1/repos/search?limit=50&sort=updated"
 	if q != "" {
-		apiURL += "&q=" + q
+		apiURL += "&q=" + url.QueryEscape(q)
 	}
 
 	req, err := http.NewRequest("GET", apiURL, nil)
@@ -283,6 +314,7 @@ func (h *ConfigHandler) GiteaBranches(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Gitea 未配置", http.StatusBadRequest)
 		return
 	}
+	giteaURL = strings.TrimRight(giteaURL, "/")
 
 	gitURL := r.URL.Query().Get("git_url")
 	if gitURL == "" {
@@ -335,6 +367,7 @@ func (h *ConfigHandler) GiteaBranches(w http.ResponseWriter, r *http.Request) {
 func extractOwnerRepo(gitURL, giteaURL string) string {
 	// Remove .git suffix
 	u := strings.TrimSuffix(gitURL, ".git")
+	giteaURL = strings.TrimRight(giteaURL, "/")
 	// Try to strip gitea base URL
 	if strings.HasPrefix(u, giteaURL) {
 		return strings.TrimPrefix(u, giteaURL+"/")
@@ -367,7 +400,7 @@ func (h *ConfigHandler) CreateTestEnv(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/config", http.StatusSeeOther)
+	http.Redirect(w, r, "/config#testenv", http.StatusSeeOther)
 }
 
 func (h *ConfigHandler) UpdateTestEnv(w http.ResponseWriter, r *http.Request) {
@@ -386,7 +419,7 @@ func (h *ConfigHandler) UpdateTestEnv(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/config", http.StatusSeeOther)
+	http.Redirect(w, r, "/config#testenv", http.StatusSeeOther)
 }
 
 func (h *ConfigHandler) DeleteTestEnv(w http.ResponseWriter, r *http.Request) {
@@ -394,5 +427,5 @@ func (h *ConfigHandler) DeleteTestEnv(w http.ResponseWriter, r *http.Request) {
 	if err := h.configService.DeleteTestEnv(uint(id)); err != nil {
 		log.Printf("[config] delete test env error: %v", err)
 	}
-	http.Redirect(w, r, "/config", http.StatusSeeOther)
+	http.Redirect(w, r, "/config#testenv", http.StatusSeeOther)
 }

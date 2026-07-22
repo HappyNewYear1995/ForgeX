@@ -9,6 +9,7 @@ type ReleaseComponent struct {
 	ComponentVersion string     `gorm:"size:64" json:"component_version"`
 	GitBranch        string     `gorm:"size:128" json:"git_branch"`
 	GitCommit        string     `gorm:"size:64" json:"git_commit"`
+	GitCommitMessage string     `gorm:"size:512" json:"git_commit_message"`
 	ArtifactFile     string     `gorm:"size:256" json:"artifact_file"`
 	BuildStatus      string     `gorm:"size:32;default:pending" json:"build_status"`
 	Component        *Component `gorm:"foreignKey:ComponentID" json:"component,omitempty"`

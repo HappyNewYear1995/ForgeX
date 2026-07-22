@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"jenkinsAgent/config"
@@ -65,6 +67,36 @@ func main() {
 	funcMap := template.FuncMap{
 		"printf":    fmt.Sprintf,
 		"cacheBust": func() string { return buildTime },
+		"lower":     strings.ToLower,
+		"statusText": func(s string) string {
+			switch s {
+			case "pending":
+				return "等待中"
+			case "running":
+				return "运行中"
+			case "success":
+				return "成功"
+			case "failed":
+				return "失败"
+			case "building":
+				return "构建中"
+			case "released":
+				return "已发布"
+			default:
+				return s
+			}
+		},
+		"stripHtml": func(s string) string {
+			re := regexp.MustCompile(`<[^>]*>`)
+			return strings.TrimSpace(re.ReplaceAllString(s, ""))
+		},
+		"truncate": func(s string, n int) string {
+			runes := []rune(s)
+			if len(runes) > n {
+				return string(runes[:n]) + "..."
+			}
+			return s
+		},
 	}
 	tmpl := parseTemplates(funcMap)
 
@@ -76,25 +108,28 @@ func main() {
 	jenkinsService.StartPolling(releaseService)
 	buildService := service.NewBuildService(jenkinsService, releaseService)
 	playwrightService := service.NewPlaywrightService()
-
-	// Auto-run scripts after build completion
-	testEnvStore := store.NewTestEnvStore()
-	buildStore := store.NewBuildStore()
-	jenkinsService.SetOnBuildComplete(func(b *model.Build) {
-		if b.RunScriptsAfterBuild {
-			playwrightService.RunScriptsForBuild(b, buildStore, testEnvStore)
-		}
-	})
+	packageService := service.NewPackageService()
+	giteaService := service.NewGiteaService(configService)
+	buildService.SetGiteaService(giteaService)
 
 	// Init handlers
 	authHandler := handler.NewAuthHandler(tmpl)
 	productHandler := handler.NewProductHandler(tmpl, productService, buildService, releaseService, configService)
 	buildHandler := handler.NewBuildHandler(tmpl, buildService, releaseService, productService)
-	releaseHandler := handler.NewReleaseHandler(tmpl, releaseService, productService)
+	releaseHandler := handler.NewReleaseHandler(tmpl, releaseService, productService, packageService, buildService)
 	configHandler := handler.NewConfigHandler(tmpl, configService, jenkinsService, productService)
 	testEnvHandler := handler.NewTestEnvHandler(configService, playwrightService)
-	callbackHandler := handler.NewCallbackHandler()
+	callbackHandler := handler.NewCallbackHandler(jenkinsService, packageService, giteaService, releaseService)
 	docsHandler := handler.NewDocsHandler(tmpl)
+
+	// Auto-run scripts after Jenkins callback (not polling) completes
+	testEnvStore := store.NewTestEnvStore()
+	buildStore := store.NewBuildStore()
+	callbackHandler.SetOnBuildComplete(func(b *model.Build) {
+		if b.RunScriptsAfterBuild {
+			playwrightService.RunScriptsForBuild(b, buildStore, testEnvStore)
+		}
+	})
 
 	// Setup static file server
 	staticSub, _ := fs.Sub(staticFS, "static")
@@ -148,6 +183,7 @@ func main() {
 		r.Get("/builds/{buildId}/log", buildHandler.Log)
 		r.Get("/builds/{buildId}/artifacts", buildHandler.Artifacts)
 		r.Get("/builds/artifacts/{artifactId}/download", buildHandler.DownloadArtifact)
+		r.Post("/builds/{buildId}/delete", buildHandler.Delete)
 
 		// Docs
 		r.Get("/docs", docsHandler.Page)
@@ -165,6 +201,10 @@ func main() {
 		r.Post("/config/sys/{category}/test", configHandler.TestAPI)
 		r.Get("/api/gitea/repos", configHandler.GiteaRepos)
 		r.Get("/api/gitea/branches", configHandler.GiteaBranches)
+		r.Get("/api/jenkins/jobs", configHandler.JenkinsJobs)
+		r.Get("/api/releases/{id}/manifest", releaseHandler.Manifest)
+		r.Get("/releases/{id}/download/{buildType}", releaseHandler.Download)
+		r.Post("/releases/{id}/delete", releaseHandler.Delete)
 
 		// Test Environments
 		r.Post("/config/testenv/new", configHandler.CreateTestEnv)

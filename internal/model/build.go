@@ -28,6 +28,7 @@ type Build struct {
 	ScriptRunOutput      string      `gorm:"type:text" json:"script_run_output"`
 	RunScriptsAfterBuild bool        `gorm:"default:false" json:"run_scripts_after_build"`
 	CallbackToken        string      `gorm:"size:64;index" json:"callback_token"`
+	JenkinsJobName       string      `gorm:"size:256" json:"jenkins_job_name"`
 	Product            *Product    `gorm:"foreignKey:ProductID" json:"product,omitempty"`
 	Release            *Release    `gorm:"foreignKey:ReleaseID" json:"release,omitempty"`
 	StartedAt          *time.Time  `json:"started_at"`
